@@ -161,10 +161,15 @@ fn load_test_model() -> Vec<TriMesh> {
 
 use std::f32::consts::PI;
 
-use kth_dd2323_project::{Color, Intersection, Ray, TriMesh, Triangle};
+use kth_dd2323_project::{Color, Intersectable, Intersection, Ray, TriMesh, Triangle};
 use nalgebra::{Matrix3, Vector3};
 use once_cell::sync::Lazy;
-use sdl2::{event::Event, keyboard::Keycode, render::Canvas, video::Window};
+use sdl2::{
+    event::Event,
+    keyboard::{KeyboardState, Keycode},
+    render::Canvas,
+    video::Window,
+};
 
 const SCREEN_WIDTH: u32 = 500;
 const SCREEN_HEIGHT: u32 = 500;
@@ -172,12 +177,7 @@ const FOCAL_LENGTH: u32 = SCREEN_HEIGHT / 2;
 const CAMERA_MOVEMENT_SPEED: f32 = 1.0;
 const CAMERA_ROTATION_SPEED: f32 = 1.0;
 const LIGHT_MOVEMENT_SPEED: f32 = 1.0;
-const cameraPosition: Vector3<f32> = Vector3::new(0.0, 0.0, -2.0);
-const cameraRotation: Matrix3<f32> = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
 // float yaw;
-// SDL2Aux *sdlAux;
-// int t;
-const lightPos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
 const lightColor: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const indirectLight: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
@@ -212,6 +212,13 @@ fn main() {
 
     let mut t = timer.ticks();
 
+    let mut camera_position: Vector3<f32> = Vector3::new(0.0, 0.0, -2.0);
+    let mut camera_rotation: Matrix3<f32> =
+        Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+    let mut light_pos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
+
+    let mut yaw = 0.0;
+
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -233,89 +240,102 @@ fn main() {
 
         t = t2;
 
-        Update(dt as f32);
-        draw(&mut canvas);
+        let keyboard = KeyboardState::new(&event_pump);
+        Update(
+            dt as f32,
+            &keyboard,
+            &mut yaw,
+            &mut light_pos,
+            &mut camera_position,
+            &mut camera_rotation,
+        );
+
+        draw(&mut canvas, &camera_position, &camera_rotation, &light_pos);
     }
 }
 
-fn Update(_dt: f32) {
+// Move and rotate camera
+fn Update(
+    dt: f32,
+    keyboard_state: &KeyboardState<'_>,
+    yaw: &mut f32,
+    light_pos: &mut Vector3<f32>,
+    camera_position: &mut Vector3<f32>,
+    camera_rotation: &mut Matrix3<f32>,
+) {
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Up) {
+        // cameraPosition += vec3(0, 0, 1).rot() * dt / 1000 * CAMERA_MOVEMENT_SPEED;
+        *camera_position += (*camera_rotation * Vector3::new(0.0, 0.0, 1.0))
+            * (dt / 1000.0)
+            * CAMERA_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Down) {
+        // Move camera backward
+        *camera_position += (*camera_rotation * Vector3::new(0.0, 0.0, -1.0))
+            * (dt / 1000.0)
+            * CAMERA_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Left) {
+        // Rotate camera left
+        // cameraPosition.x -= dt / 1000 * CAMERA_MOVEMENT_SPEED;
+        *yaw += dt / 1000.0 * CAMERA_ROTATION_SPEED;
 
-    // Move and rotate camera
-    // const Uint8 *keystate = SDL_GetKeyboardState(NULL);
-    // if (keystate[SDL_SCANCODE_UP])
-    // {
-    // 	// cameraPosition += vec3(0, 0, 1).rot() * dt / 1000 * CAMERA_MOVEMENT_SPEED;
-    // 	cameraPosition += (cameraRotation * vec3(0, 0, 1)) * (dt / 1000) * CAMERA_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_DOWN])
-    // {
-    // 	// Move camera backward
-    // 	cameraPosition += (cameraRotation * vec3(0, 0, -1)) * (dt / 1000) * CAMERA_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_LEFT])
-    // {
-    // 	// Rotate camera left
-    // 	// cameraPosition.x -= dt / 1000 * CAMERA_MOVEMENT_SPEED;
-    // 	yaw += dt / 1000 * CAMERA_ROTATION_SPEED;
+        // Update values that don't change
+        camera_rotation[(0, 0)] = yaw.cos();
+        camera_rotation[(2, 0)] = yaw.sin();
+        camera_rotation[(0, 2)] = -yaw.sin();
+        camera_rotation[(2, 2)] = yaw.cos();
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Right) {
+        // Rotate camera right
+        // cameraPosition.x += dt / 1000 * CAMERA_MOVEMENT_SPEED;
+        *yaw -= dt / 1000.0 * CAMERA_ROTATION_SPEED;
 
-    // 	// Update values that don't change
-    // 	cameraRotation[0][0] = cos(yaw);
-    // 	cameraRotation[0][2] = sin(yaw);
-    // 	cameraRotation[2][0] = -sin(yaw);
-    // 	cameraRotation[2][2] = cos(yaw);
-    // }
-    // if (keystate[SDL_SCANCODE_RIGHT])
-    // {
-    // 	// Rotate camera right
-    // 	// cameraPosition.x += dt / 1000 * CAMERA_MOVEMENT_SPEED;
-    // 	yaw -= dt / 1000 * CAMERA_ROTATION_SPEED;
+        // Update values that don't change
+        camera_rotation[(0, 0)] = yaw.cos();
+        camera_rotation[(2, 0)] = yaw.sin();
+        camera_rotation[(0, 2)] = -yaw.sin();
+        camera_rotation[(2, 2)] = yaw.cos();
+    }
 
-    // 	// Update values that don't change
-    // 	cameraRotation[0][0] = cos(yaw);
-    // 	cameraRotation[0][2] = sin(yaw);
-    // 	cameraRotation[2][0] = -sin(yaw);
-    // 	cameraRotation[2][2] = cos(yaw);
-    // }
-
-    // // Move light position
-    // if (keystate[SDL_SCANCODE_W])
-    // {
-    // 	// Move light forward
-    // 	lightPos.z += (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_S])
-    // {
-    // 	// Move light backwards
-    // 	lightPos.z -= (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_A])
-    // {
-    // 	// Move light left
-    // 	lightPos.x -= (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_D])
-    // {
-    // 	// Move light right
-    // 	lightPos.x += (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_Q])
-    // {
-    // 	// Move light up
-    // 	lightPos.y -= (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
-    // if (keystate[SDL_SCANCODE_E])
-    // {
-    // 	// Move light down
-    // 	lightPos.y += (dt / 1000) * LIGHT_MOVEMENT_SPEED;
-    // }
+    // Move light position
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::W) {
+        // Move light forward
+        light_pos.z += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::S) {
+        // Move light backwards
+        light_pos.z -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::A) {
+        // Move light left
+        light_pos.x -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::D) {
+        // Move light right
+        light_pos.x += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Q) {
+        // Move light up
+        light_pos.y -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::E) {
+        // Move light down
+        light_pos.y += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
+    }
 }
 
-fn draw(canvas: &mut Canvas<Window>) {
+fn draw(
+    canvas: &mut Canvas<Window>,
+    camera_position: &Vector3<f32>,
+    camera_rotation: &Matrix3<f32>,
+    light_pos: &Vector3<f32>,
+) {
     canvas.clear();
 
     for y in 0..SCREEN_HEIGHT as i32 {
         for x in 0..SCREEN_WIDTH as i32 {
-            let direction = cameraRotation
+            let direction = camera_rotation
                 * Vector3::new(
                     (x - (SCREEN_WIDTH as i32 / 2)) as f32,
                     (y - (SCREEN_HEIGHT as i32 / 2)) as f32,
@@ -326,10 +346,11 @@ fn draw(canvas: &mut Canvas<Window>) {
 
             // Get color from triangle
             if let Some((intersection, triangle_index)) =
-                closest_intersection(cameraPosition, direction, TRIANGLES.iter())
+                closest_intersection(*camera_position, direction, TRIANGLES.iter())
             {
                 let reflect_fraction = TRIANGLES[triangle_index].color;
-                let light = direct_light(&intersection, &TRIANGLES[triangle_index]) + indirectLight;
+                let light = direct_light(&intersection, &TRIANGLES[triangle_index], light_pos)
+                    + indirectLight;
                 color.0 = reflect_fraction.0.component_mul(&light);
             }
 
@@ -344,7 +365,7 @@ fn draw(canvas: &mut Canvas<Window>) {
 fn closest_intersection<'a>(
     start: Vector3<f32>,
     dir: Vector3<f32>,
-    local_triangles: impl IntoIterator<Item = &'a Triangle>,
+    local_triangles: impl IntoIterator<Item = &'a (impl Intersectable + 'a)>,
 ) -> Option<(Intersection, usize)> {
     let mut closest_intersection: Option<(Intersection, usize)> = None;
 
@@ -375,10 +396,10 @@ fn closest_intersection<'a>(
     closest_intersection
 }
 
-fn direct_light(i: &Intersection, triangle: &Triangle) -> Vector3<f32> {
+fn direct_light(i: &Intersection, triangle: &Triangle, light_pos: &Vector3<f32>) -> Vector3<f32> {
     let P = lightColor;
 
-    let mut rvec = lightPos - i.position;
+    let mut rvec = *light_pos - i.position;
     let r = rvec.norm();
     rvec = rvec.normalize();
 
