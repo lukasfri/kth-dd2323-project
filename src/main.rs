@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 // Defines a simple test model: The Cornel Box
 
 // Used to describe a triangular surface:
@@ -33,7 +34,7 @@ impl Triangle {
 // -1 <= x <= +1
 // -1 <= y <= +1
 // -1 <= z <= +1
-fn LoadTestModel(local_triangles: &mut Vec<Triangle>) {
+fn load_test_model(local_triangles: &mut Vec<Triangle>) {
     // Defines colors:
     let red = Vector3::new(0.75, 0.15, 0.15);
     let yellow = Vector3::new(0.75, 0.75, 0.15);
@@ -150,24 +151,24 @@ fn LoadTestModel(local_triangles: &mut Vec<Triangle>) {
     // ----------------------------------------------
     // Scale to the volume [-1,1]^3
 
-    for i in 0..local_triangles.len() {
-        local_triangles[i].v0 *= 2.0 / L;
-        local_triangles[i].v1 *= 2.0 / L;
-        local_triangles[i].v2 *= 2.0 / L;
+    for local_triangle in local_triangles.iter_mut() {
+        local_triangle.v0 *= 2.0 / L;
+        local_triangle.v1 *= 2.0 / L;
+        local_triangle.v2 *= 2.0 / L;
 
-        local_triangles[i].v0 -= Vector3::new(1.0, 1.0, 1.0);
-        local_triangles[i].v1 -= Vector3::new(1.0, 1.0, 1.0);
-        local_triangles[i].v2 -= Vector3::new(1.0, 1.0, 1.0);
+        local_triangle.v0 -= Vector3::new(1.0, 1.0, 1.0);
+        local_triangle.v1 -= Vector3::new(1.0, 1.0, 1.0);
+        local_triangle.v2 -= Vector3::new(1.0, 1.0, 1.0);
 
-        local_triangles[i].v0.x *= -1.0;
-        local_triangles[i].v1.x *= -1.0;
-        local_triangles[i].v2.x *= -1.0;
+        local_triangle.v0.x *= -1.0;
+        local_triangle.v1.x *= -1.0;
+        local_triangle.v2.x *= -1.0;
 
-        local_triangles[i].v0.y *= -1.0;
-        local_triangles[i].v1.y *= -1.0;
-        local_triangles[i].v2.y *= -1.0;
+        local_triangle.v0.y *= -1.0;
+        local_triangle.v1.y *= -1.0;
+        local_triangle.v2.y *= -1.0;
 
-        local_triangles[i].compute_normal();
+        local_triangle.compute_normal();
     }
 }
 
@@ -176,7 +177,7 @@ fn LoadTestModel(local_triangles: &mut Vec<Triangle>) {
 
 use std::f32::consts::PI;
 
-use nalgebra::{ComplexField, Matrix3, Vector3};
+use nalgebra::{Matrix3, Vector3};
 use once_cell::sync::Lazy;
 use sdl2::{event::Event, keyboard::Keycode, pixels::Color, render::Canvas, video::Window};
 
@@ -195,9 +196,9 @@ const lightPos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
 const lightColor: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const indirectLight: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
-static triangles: Lazy<Vec<Triangle>> = Lazy::new(|| {
+static TRIANGLES: Lazy<Vec<Triangle>> = Lazy::new(|| {
     let mut init_triangles = Vec::new();
-    LoadTestModel(&mut init_triangles);
+    load_test_model(&mut init_triangles);
     init_triangles
 });
 
@@ -205,7 +206,7 @@ static triangles: Lazy<Vec<Triangle>> = Lazy::new(|| {
 struct Intersection {
     position: Vector3<f32>,
     distance: f32,
-    triangleIndex: usize,
+    triangle_index: usize,
 }
 
 // ----------------------------------------------------------------------------
@@ -254,11 +255,11 @@ fn main() {
         t = t2;
 
         Update(dt as f32);
-        Draw(&mut canvas);
+        draw(&mut canvas);
     }
 }
 
-fn Update(dt: f32) {
+fn Update(_dt: f32) {
 
     // Move and rotate camera
     // const Uint8 *keystate = SDL_GetKeyboardState(NULL);
@@ -330,7 +331,7 @@ fn Update(dt: f32) {
     // }
 }
 
-fn Draw(canvas: &mut Canvas<Window>) {
+fn draw(canvas: &mut Canvas<Window>) {
     canvas.clear();
 
     for y in 0..SCREEN_HEIGHT as i32 {
@@ -341,16 +342,15 @@ fn Draw(canvas: &mut Canvas<Window>) {
                     (y - (SCREEN_HEIGHT as i32 / 2)) as f32,
                     FOCAL_LENGTH as f32,
                 );
-            let mut intersection = Intersection::default();
-            let foundIntersection =
-                ClosestIntersection(cameraPosition, direction, &triangles, &mut intersection);
+
             let mut color = Vector3::<f32>::new(0.0, 0.0, 0.0);
 
             // Get color from triangle
-            if (foundIntersection) {
-                let reflectFraction = triangles[intersection.triangleIndex].color;
-                let light = (DirectLight(&intersection) + indirectLight);
-                color = reflectFraction.component_mul(&light);
+            if let Some(intersection) = closest_intersection(cameraPosition, direction, &TRIANGLES)
+            {
+                let reflect_fraction = TRIANGLES[intersection.triangle_index].color;
+                let light = direct_light(&intersection) + indirectLight;
+                color = reflect_fraction.component_mul(&light);
             }
 
             let color = Color::RGB(
@@ -367,17 +367,15 @@ fn Draw(canvas: &mut Canvas<Window>) {
     canvas.present();
 }
 
-fn ClosestIntersection(
+fn closest_intersection(
     start: Vector3<f32>,
     dir: Vector3<f32>,
-    local_triangles: &Vec<Triangle>,
-    closestIntersection: &mut Intersection,
-) -> bool {
+    local_triangles: &[Triangle],
+) -> Option<Intersection> {
     let mut m = f32::MAX;
+    let mut closest_intersection = None;
 
-    for i in 0..local_triangles.len() {
-        let triangle = &local_triangles[i];
-
+    for (i, triangle) in local_triangles.iter().enumerate() {
         let v0 = triangle.v0;
         let v1 = triangle.v1;
         let v2 = triangle.v2;
@@ -397,34 +395,36 @@ fn ClosestIntersection(
         // Continues if any of the conditions are false
         // We know the following conditions could be written without the not-operators,
         // but we've kept them to keep the original equations clear.
-        if (!(t >= 0.0) || !(u >= 0.0) || !(v >= 0.0) || !(u + v <= 1.0)) {
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
+        if !(t >= 0.0) || !(u >= 0.0) || !(v >= 0.0) || !(u + v <= 1.0) {
             continue;
         }
 
         // If intersection is not closer than the current closest one
-        if (!(t < m)) {
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
+        if !(t < m) {
             continue;
         }
 
         // If intersection is start, ignore it.
-        if (t.abs() < 0.000001) {
+        if t.abs() < 0.000001 {
             continue;
         }
 
         m = t;
-        *closestIntersection = Intersection {
+        closest_intersection = Some(Intersection {
             position: v0 + u * e1 + v * e2,
             distance: t,
-            triangleIndex: i,
-        };
+            triangle_index: i,
+        });
     }
 
     // If m is not max value anymore, we've found an intersection.
-    return m != f32::MAX;
+    closest_intersection
 }
 
-fn DirectLight(i: &Intersection) -> Vector3<f32> {
-    let triangle = &triangles[i.triangleIndex];
+fn direct_light(i: &Intersection) -> Vector3<f32> {
+    let triangle = &TRIANGLES[i.triangle_index];
 
     let P = lightColor;
 
@@ -432,17 +432,14 @@ fn DirectLight(i: &Intersection) -> Vector3<f32> {
     let r = rvec.norm();
     rvec = rvec.normalize();
 
-    let mut intersection = Intersection::default();
-
-    if (ClosestIntersection(i.position, rvec, &triangles, &mut intersection)
-        && intersection.distance < r)
-    {
-        return Vector3::new(0.0, 0.0, 0.0);
+    if let Some(intersection) = closest_intersection(i.position, rvec, &TRIANGLES) {
+        if intersection.distance < r {
+            return Vector3::new(0.0, 0.0, 0.0);
+        }
     }
 
     let mut B = P;
-    B /= (4.0 * PI * r * r);
+    B /= 4.0 * PI * r * r;
 
-    let D = B * rvec.dot(&triangle.normal).max(0.0);
-    return D;
+    B * rvec.dot(&triangle.normal).max(0.0)
 }
