@@ -5,6 +5,28 @@ pub struct Ray {
     pub direction: Vector3<f32>,
 }
 
+pub struct TriMesh {
+    pub triangles: Vec<Triangle>,
+}
+
+impl TriMesh {
+    pub fn new(triangles: Vec<Triangle>) -> Self {
+        Self { triangles }
+    }
+
+    pub fn triangles(&self) -> &Vec<Triangle> {
+        &self.triangles
+    }
+
+    pub fn triangles_mut(&mut self) -> &mut Vec<Triangle> {
+        &mut self.triangles
+    }
+
+    pub fn into_triangles(self) -> Vec<Triangle> {
+        self.triangles
+    }
+}
+
 pub struct Triangle {
     pub v0: Vector3<f32>,
     pub v1: Vector3<f32>,
@@ -15,21 +37,23 @@ pub struct Triangle {
 
 impl Triangle {
     pub fn new(v0: Vector3<f32>, v1: Vector3<f32>, v2: Vector3<f32>, color: Color) -> Self {
-        let mut triangle = Self {
+        Self {
             v0,
             v1,
             v2,
             color,
-            normal: Vector3::default(),
-        };
-        triangle.compute_normal();
-        triangle
+            normal: Self::calculate_normal(v0, v1, v2),
+        }
     }
 
-    pub fn compute_normal(&mut self) {
-        let e1 = self.v1 - self.v0;
-        let e2 = self.v2 - self.v0;
-        self.normal = e2.cross(&e1).normalize();
+    fn calculate_normal(v0: Vector3<f32>, v1: Vector3<f32>, v2: Vector3<f32>) -> Vector3<f32> {
+        let e1 = v1 - v0;
+        let e2 = v2 - v0;
+        e2.cross(&e1).normalize()
+    }
+
+    pub fn update_normal(&mut self) {
+        self.normal = Self::calculate_normal(self.v0, self.v1, self.v2);
     }
 }
 

@@ -5,7 +5,9 @@
 // -1 <= x <= +1
 // -1 <= y <= +1
 // -1 <= z <= +1
-fn load_test_model(local_triangles: &mut Vec<Triangle>) {
+fn load_test_model() -> Vec<TriMesh> {
+    let mut meshes = Vec::new();
+
     // Defines colors:
     let red = Color::new(0.75, 0.15, 0.15);
     let yellow = Color::new(0.75, 0.75, 0.15);
@@ -15,11 +17,10 @@ fn load_test_model(local_triangles: &mut Vec<Triangle>) {
     let purple = Color::new(0.75, 0.15, 0.75);
     let white = Color::new(0.75, 0.75, 0.75);
 
-    local_triangles.clear();
-    local_triangles.reserve(5 * 2 * 3);
-
     // ---------------------------------------------------------------------------
     // Room
+
+    let mut local_triangles = Vec::new();
 
     let L = 555.0; // Length of Cornell Box side.
 
@@ -53,8 +54,12 @@ fn load_test_model(local_triangles: &mut Vec<Triangle>) {
     local_triangles.push(Triangle::new(G, D, C, white));
     local_triangles.push(Triangle::new(G, H, D, white));
 
+    meshes.push(TriMesh::new(local_triangles));
+
     // ---------------------------------------------------------------------------
     // Short block
+
+    let mut local_triangles = Vec::new();
 
     let A = Vector3::new(290.0, 0.0, 114.0);
     let B = Vector3::new(130.0, 0.0, 65.0);
@@ -86,8 +91,12 @@ fn load_test_model(local_triangles: &mut Vec<Triangle>) {
     local_triangles.push(Triangle::new(G, F, E, red));
     local_triangles.push(Triangle::new(G, H, F, red));
 
+    meshes.push(TriMesh::new(local_triangles));
+
     // ---------------------------------------------------------------------------
     // Tall block
+
+    let mut local_triangles = Vec::new();
 
     let A = Vector3::new(423.0, 0.0, 247.0);
     let B = Vector3::new(265.0, 0.0, 296.0);
@@ -119,28 +128,32 @@ fn load_test_model(local_triangles: &mut Vec<Triangle>) {
     local_triangles.push(Triangle::new(G, F, E, blue));
     local_triangles.push(Triangle::new(G, H, F, blue));
 
+    meshes.push(TriMesh::new(local_triangles));
+
     // ----------------------------------------------
     // Scale to the volume [-1,1]^3
 
-    for local_triangle in local_triangles.iter_mut() {
-        local_triangle.v0 *= 2.0 / L;
-        local_triangle.v1 *= 2.0 / L;
-        local_triangle.v2 *= 2.0 / L;
+    for triangle in meshes.iter_mut().flat_map(|a| a.triangles_mut()) {
+        triangle.v0 *= 2.0 / L;
+        triangle.v1 *= 2.0 / L;
+        triangle.v2 *= 2.0 / L;
 
-        local_triangle.v0 -= Vector3::new(1.0, 1.0, 1.0);
-        local_triangle.v1 -= Vector3::new(1.0, 1.0, 1.0);
-        local_triangle.v2 -= Vector3::new(1.0, 1.0, 1.0);
+        triangle.v0 -= Vector3::new(1.0, 1.0, 1.0);
+        triangle.v1 -= Vector3::new(1.0, 1.0, 1.0);
+        triangle.v2 -= Vector3::new(1.0, 1.0, 1.0);
 
-        local_triangle.v0.x *= -1.0;
-        local_triangle.v1.x *= -1.0;
-        local_triangle.v2.x *= -1.0;
+        triangle.v0.x *= -1.0;
+        triangle.v1.x *= -1.0;
+        triangle.v2.x *= -1.0;
 
-        local_triangle.v0.y *= -1.0;
-        local_triangle.v1.y *= -1.0;
-        local_triangle.v2.y *= -1.0;
+        triangle.v0.y *= -1.0;
+        triangle.v1.y *= -1.0;
+        triangle.v2.y *= -1.0;
 
-        local_triangle.compute_normal();
+        triangle.update_normal();
     }
+
+    meshes
 }
 
 // ----------------------------------------------------------------------------
@@ -148,7 +161,7 @@ fn load_test_model(local_triangles: &mut Vec<Triangle>) {
 
 use std::f32::consts::PI;
 
-use kth_dd2323_project::{Color, Intersection, Ray, Triangle};
+use kth_dd2323_project::{Color, Intersection, Ray, TriMesh, Triangle};
 use nalgebra::{Matrix3, Vector3};
 use once_cell::sync::Lazy;
 use sdl2::{event::Event, keyboard::Keycode, render::Canvas, video::Window};
@@ -169,9 +182,10 @@ const lightColor: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const indirectLight: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
 static TRIANGLES: Lazy<Vec<Triangle>> = Lazy::new(|| {
-    let mut init_triangles = Vec::new();
-    load_test_model(&mut init_triangles);
-    init_triangles
+    load_test_model()
+        .into_iter()
+        .flat_map(|a| a.into_triangles())
+        .collect()
 });
 
 // ----------------------------------------------------------------------------
@@ -312,7 +326,7 @@ fn draw(canvas: &mut Canvas<Window>) {
 
             // Get color from triangle
             if let Some((intersection, triangle_index)) =
-                closest_intersection(cameraPosition, direction, &TRIANGLES)
+                closest_intersection(cameraPosition, direction, TRIANGLES.iter())
             {
                 let reflect_fraction = TRIANGLES[triangle_index].color;
                 let light = direct_light(&intersection, &TRIANGLES[triangle_index]) + indirectLight;
@@ -327,18 +341,24 @@ fn draw(canvas: &mut Canvas<Window>) {
     canvas.present();
 }
 
-fn closest_intersection(
+fn closest_intersection<'a>(
     start: Vector3<f32>,
     dir: Vector3<f32>,
-    local_triangles: &[Triangle],
+    local_triangles: impl IntoIterator<Item = &'a Triangle>,
 ) -> Option<(Intersection, usize)> {
     let mut closest_intersection: Option<(Intersection, usize)> = None;
 
-    for (i, triangle) in local_triangles.iter().enumerate() {
-        let Some(intersection) = Ray::new(start, dir).intersect(triangle) else {
-            continue;
-        };
-
+    for (intersection, i) in local_triangles
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, triangle)| {
+            Ray::new(start, dir)
+                .intersect(triangle)
+                .map(|intersection| (intersection, i))
+        })
+        // If intersection is start, ignore it.
+        .filter(|(intersection, _)| intersection.distance >= 0.000001)
+    {
         // If intersection is not closer than the current closest one
         #[allow(clippy::neg_cmp_op_on_partial_ord)]
         if !(intersection.distance
@@ -349,15 +369,9 @@ fn closest_intersection(
             continue;
         }
 
-        // If intersection is start, ignore it.
-        if intersection.distance.abs() < 0.000001 {
-            continue;
-        }
-
         closest_intersection = Some((intersection, i));
     }
 
-    // If m is not max value anymore, we've found an intersection.
     closest_intersection
 }
 
@@ -368,7 +382,7 @@ fn direct_light(i: &Intersection, triangle: &Triangle) -> Vector3<f32> {
     let r = rvec.norm();
     rvec = rvec.normalize();
 
-    if closest_intersection(i.position, rvec, &TRIANGLES)
+    if closest_intersection(i.position, rvec, TRIANGLES.iter())
         // Is there an intersection closer than the light?
         .filter(|(intersection, _)| intersection.distance < r)
         .is_some()
