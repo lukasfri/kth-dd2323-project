@@ -43,6 +43,7 @@ pub trait Intersectable {
 }
 
 impl Intersectable for Triangle {
+    #[inline(always)]
     fn intersect(&self, ray: &Ray) -> Option<Intersection> {
         let v0 = self.v0;
         let v1 = self.v1;
@@ -73,10 +74,12 @@ impl Intersectable for Triangle {
 }
 
 impl Ray {
+    #[inline(always)]
     pub fn new(origin: Vector3<f32>, direction: Vector3<f32>) -> Ray {
         Ray { origin, direction }
     }
 
+    #[inline(always)]
     pub fn intersect(&self, intersectable: &impl Intersectable) -> Option<Intersection> {
         intersectable.intersect(self)
     }
@@ -96,6 +99,7 @@ impl Color {
         Color(Vector3::new(r, g, b))
     }
 
+    #[inline(always)]
     pub fn to_sdl(&self) -> sdl2::pixels::Color {
         sdl2::pixels::Color::RGB(
             (self.0.x * 255.0) as u8,
