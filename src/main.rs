@@ -275,6 +275,18 @@ fn Update(
             * (dt / 1000.0)
             * CAMERA_MOVEMENT_SPEED;
     }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Space) {
+        // Move camera up
+        *camera_position += (*camera_rotation * Vector3::new(0.0, -1.0, 0.0))
+            * (dt / 1000.0)
+            * CAMERA_MOVEMENT_SPEED;
+    }
+    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::LShift) {
+        // Move camera down
+        *camera_position += (*camera_rotation * Vector3::new(0.0, 1.0, 0.0))
+            * (dt / 1000.0)
+            * CAMERA_MOVEMENT_SPEED;
+    }
     if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Left) {
         // Rotate camera left
         // cameraPosition.x -= dt / 1000 * CAMERA_MOVEMENT_SPEED;
