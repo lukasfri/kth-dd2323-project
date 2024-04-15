@@ -1,6 +1,5 @@
 use easy_gltf::model::Vertex;
 use nalgebra::{Matrix3, Vector3};
-use rayon::vec;
 
 pub struct Ray {
     pub origin: Vector3<f32>,
@@ -29,6 +28,7 @@ impl TriMesh {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Triangle {
     pub v0: Vector3<f32>,
     pub v1: Vector3<f32>,

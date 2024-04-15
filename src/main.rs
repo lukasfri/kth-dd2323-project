@@ -215,8 +215,8 @@ const CAMERA_MOVEMENT_SPEED: f32 = 1.0;
 const CAMERA_ROTATION_SPEED: f32 = 1.0;
 const LIGHT_MOVEMENT_SPEED: f32 = 1.0;
 // float yaw;
-const lightColor: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
-const indirectLight: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
+const LIGHT_COLOR: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
+const INDRECT_LIGHT: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
 static TRIANGLES: Lazy<Vec<Triangle>> = Lazy::new(|| {
     load_gltf_model("./resources/test_model.glb")
@@ -270,15 +270,12 @@ fn main() {
         }
 
         let t2 = timer.ticks();
-
         let dt = t2 - t;
-
         println!("Render time: {}ms", dt);
-
         t = t2;
 
         let keyboard = KeyboardState::new(&event_pump);
-        Update(
+        update(
             dt as f32,
             &keyboard,
             &mut yaw,
@@ -292,7 +289,7 @@ fn main() {
 }
 
 // Move and rotate camera
-fn Update(
+fn update(
     dt: f32,
     keyboard_state: &KeyboardState<'_>,
     yaw: &mut f32,
@@ -381,7 +378,6 @@ fn draw(
     light_pos: &Vector3<f32>,
 ) {
     canvas.clear();
-
     for y in 0..SCREEN_HEIGHT as i32 {
         for x in 0..SCREEN_WIDTH as i32 {
             let direction = camera_rotation
@@ -399,7 +395,7 @@ fn draw(
             {
                 let reflect_fraction = TRIANGLES[triangle_index].color;
                 let light = direct_light(&intersection, &TRIANGLES[triangle_index], light_pos)
-                    + indirectLight;
+                    + INDRECT_LIGHT;
                 color.0 = reflect_fraction.0.component_mul(&light);
             }
 
@@ -446,7 +442,7 @@ fn closest_intersection<'a>(
 }
 
 fn direct_light(i: &Intersection, triangle: &Triangle, light_pos: &Vector3<f32>) -> Vector3<f32> {
-    let P = lightColor;
+    let P = LIGHT_COLOR;
 
     let mut rvec = *light_pos - i.position;
     let r = rvec.norm();
