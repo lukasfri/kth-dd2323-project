@@ -1,3 +1,4 @@
+use easy_gltf::model::Vertex;
 use nalgebra::{Matrix3, Vector3};
 
 pub struct Ray {
@@ -44,6 +45,30 @@ impl Triangle {
             color,
             normal: Self::calculate_normal(v0, v1, v2),
         }
+    }
+
+    pub fn new_from_gltf(vertices: [Vertex; 3], color: Color) -> Self {
+        let mut triangle = Self {
+            v0: Vector3::new(
+                vertices[0].position.x,
+                vertices[0].position.y,
+                vertices[0].position.z,
+            ),
+            v1: Vector3::new(
+                vertices[1].position.x,
+                vertices[1].position.y,
+                vertices[1].position.z,
+            ),
+            v2: Vector3::new(
+                vertices[2].position.x,
+                vertices[2].position.y,
+                vertices[2].position.z,
+            ),
+            color,
+            normal: Vector3::zeros(),
+        };
+        triangle.update_normal();
+        triangle
     }
 
     fn calculate_normal(v0: Vector3<f32>, v1: Vector3<f32>, v2: Vector3<f32>) -> Vector3<f32> {

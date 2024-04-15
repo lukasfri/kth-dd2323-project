@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+
 // Defines a simple test model: The Cornel Box
 
 // Loads the Cornell Box. It is scaled to fill the volume:
@@ -156,6 +157,43 @@ fn load_test_model() -> Vec<TriMesh> {
     meshes
 }
 
+fn load_gltf_model(path: &str) -> Vec<TriMesh> {
+    let scenes = easy_gltf::load(path).expect("Failed to load glTF");
+    for scene in scenes {
+        println!(
+            "Cameras: #{}  Lights: #{}  Models: #{}",
+            scene.cameras.len(),
+            scene.lights.len(),
+            scene.models.len()
+        );
+
+        let mut meshes = Vec::new();
+
+        for model in scene.models {
+            let mut local_triangles = Vec::new();
+
+            // Only support triangle meshes
+            match model.mode() {
+                easy_gltf::model::Mode::Triangles => {
+                    if let Ok(gltf_triangles) = model.triangles() {
+                        for gltf_triangle in gltf_triangles {
+                            let triangle = Triangle::new_from_gltf(gltf_triangle, Color::BLUE);
+                            local_triangles.push(triangle);
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            meshes.push(TriMesh::new(local_triangles));
+        }
+
+        return meshes;
+    }
+
+    Vec::new()
+}
+
 // ----------------------------------------------------------------------------
 // GLOBAL VARIABLES
 
@@ -182,7 +220,7 @@ const lightColor: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const indirectLight: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
 static TRIANGLES: Lazy<Vec<Triangle>> = Lazy::new(|| {
-    load_test_model()
+    load_gltf_model("./resources/test_model.glb")
         .into_iter()
         .flat_map(|a| a.into_triangles())
         .collect()
