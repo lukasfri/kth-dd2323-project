@@ -1,5 +1,6 @@
 use easy_gltf::model::Vertex;
 use nalgebra::{Matrix3, Vector3};
+use rayon::vec;
 
 pub struct Ray {
     pub origin: Vector3<f32>,
@@ -146,6 +147,10 @@ impl Color {
 
     pub const fn new(r: f32, g: f32, b: f32) -> Self {
         Color(Vector3::new(r, g, b))
+    }
+
+    pub const fn new_from_vector(vector: cgmath::Vector3<f32>) -> Self {
+        Color(Vector3::new(vector.x, vector.y, vector.z))
     }
 
     #[inline(always)]

@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use cgmath::Vector2;
 
 // Defines a simple test model: The Cornel Box
 
@@ -160,13 +161,6 @@ fn load_test_model() -> Vec<TriMesh> {
 fn load_gltf_model(path: &str) -> Vec<TriMesh> {
     let scenes = easy_gltf::load(path).expect("Failed to load glTF");
     for scene in scenes {
-        println!(
-            "Cameras: #{}  Lights: #{}  Models: #{}",
-            scene.cameras.len(),
-            scene.lights.len(),
-            scene.models.len()
-        );
-
         let mut meshes = Vec::new();
 
         for model in scene.models {
@@ -175,9 +169,14 @@ fn load_gltf_model(path: &str) -> Vec<TriMesh> {
             // Only support triangle meshes
             match model.mode() {
                 easy_gltf::model::Mode::Triangles => {
+                    let color = Color::new_from_vector(model.material().get_base_color(Vector2::<
+                        f32,
+                    >::new(
+                        0.0, 0.0
+                    )));
                     if let Ok(gltf_triangles) = model.triangles() {
                         for gltf_triangle in gltf_triangles {
-                            let triangle = Triangle::new_from_gltf(gltf_triangle, Color::BLUE);
+                            let triangle = Triangle::new_from_gltf(gltf_triangle, color);
                             local_triangles.push(triangle);
                         }
                     }

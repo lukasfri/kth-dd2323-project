@@ -509,6 +509,7 @@ checksum = "f5d4a7da358eff58addd2877a45865158f0d78c911d43a5784ceb7bbf52833b0"
 name = "kth-dd2323-project"
 version = "0.1.0"
 dependencies = [
+ "cgmath",
  "derive_more",
  "easy-gltf",
  "nalgebra",
