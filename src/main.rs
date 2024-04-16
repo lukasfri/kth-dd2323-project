@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
-use cgmath::Vector2;
-
+use sdl2::{mouse::MouseButton, Sdl};
 // Defines a simple test model: The Cornel Box
 
 // Loads the Cornell Box. It is scaled to fill the volume:
@@ -140,17 +139,15 @@ fn load_test_model() -> Vec<TriMesh> {
         triangle.v1 *= 2.0 / L;
         triangle.v2 *= 2.0 / L;
 
+        let rotation = Rotation3::from_euler_angles(PI / 2.0, 0.0, PI / 2.0);
+        // let rotation = Rotation3::from_euler_angles(0.0, PI / 2.0, PI / 2.0);
+        triangle.v0 = rotation * triangle.v0;
+        triangle.v1 = rotation * triangle.v1;
+        triangle.v2 = rotation * triangle.v2;
+
         triangle.v0 -= Vector3::new(1.0, 1.0, 1.0);
         triangle.v1 -= Vector3::new(1.0, 1.0, 1.0);
         triangle.v2 -= Vector3::new(1.0, 1.0, 1.0);
-
-        triangle.v0.x *= -1.0;
-        triangle.v1.x *= -1.0;
-        triangle.v2.x *= -1.0;
-
-        triangle.v0.y *= -1.0;
-        triangle.v1.y *= -1.0;
-        triangle.v2.y *= -1.0;
 
         triangle.update_normal();
     }
@@ -170,21 +167,18 @@ fn load_gltf_model(path: &str) -> Vec<TriMesh> {
         let mut local_triangles = Vec::new();
 
         // Only support triangle meshes
-        match model.mode() {
-            easy_gltf::model::Mode::Triangles => {
-                let color = Color::new_from_vector(
-                    model
-                        .material()
-                        .get_base_color(Vector2::<f32>::new(0.0, 0.0)),
-                );
-                if let Ok(gltf_triangles) = model.triangles() {
-                    for gltf_triangle in gltf_triangles {
-                        let triangle = Triangle::new_from_gltf(gltf_triangle, color);
-                        local_triangles.push(triangle);
-                    }
+        if model.mode() == easy_gltf::model::Mode::Triangles {
+            let color = Color::new_from_vector(model.material().get_base_color(cgmath::Vector2::<
+                f32,
+            >::new(
+                0.0, 0.0
+            )));
+            if let Ok(gltf_triangles) = model.triangles() {
+                for gltf_triangle in gltf_triangles {
+                    let triangle = Triangle::new_from_gltf(gltf_triangle, color);
+                    local_triangles.push(triangle);
                 }
             }
-            _ => {}
         }
 
         meshes.push(TriMesh::new(local_triangles));
@@ -199,11 +193,12 @@ fn load_gltf_model(path: &str) -> Vec<TriMesh> {
 use std::f32::consts::PI;
 
 use kth_dd2323_project::{Color, Intersectable, Intersection, Ray, TriMesh, Triangle};
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::{Rotation, Rotation3, Vector2, Vector3};
 use once_cell::sync::Lazy;
 use sdl2::{
     event::Event,
     keyboard::{KeyboardState, Keycode, Scancode},
+    mouse::MouseState,
     render::Canvas,
     video::Window,
 };
@@ -213,6 +208,7 @@ const SCREEN_HEIGHT: u32 = 500;
 const FOCAL_LENGTH: u32 = SCREEN_HEIGHT / 2;
 const CAMERA_MOVEMENT_SPEED: f32 = 1.0;
 const CAMERA_ROTATION_SPEED: f32 = 1.0;
+const CAMERA_MOUSE_ROTATION_SPEED: f32 = 0.02;
 const LIGHT_COLOR: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const INDRECT_LIGHT: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
@@ -248,12 +244,13 @@ fn main() {
 
     let mut t = timer.ticks();
 
-    let mut camera_position: Vector3<f32> = Vector3::new(0.0, 0.0, -2.0);
-    let mut camera_rotation: Matrix3<f32> =
-        Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-    let light_pos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
+    let mut camera_position: Vector3<f32> = Vector3::new(-4.0, 0.0, 0.0);
+    let mut camera_rotation: Rotation3<f32> = Rotation3::default();
+    let light_pos: Vector3<f32> = Vector3::new(-0.5, 0.0, 0.7);
+    let mut mouse_reference_position: Option<Vector2<f32>> = None;
 
     let mut yaw = 0.0;
+    let mut pitch = 0.0;
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -272,15 +269,23 @@ fn main() {
 
         let t2 = timer.ticks();
         let dt = t2 - t;
-        println!("Render time: {}ms", dt);
+        println!(
+            "Render time: {}ms camera pos {:?}, camera rot {:?}",
+            dt, camera_position, camera_rotation
+        );
         t = t2;
 
         let keyboard = KeyboardState::new(&event_pump);
-        let state = binds.current_state(&keyboard);
+        let mouse = MouseState::new(&event_pump);
+        let state = binds.current_state(&keyboard, &mouse);
         update(
             dt as f32,
             &state,
+            &sdl_context,
+            canvas.window(),
             &mut yaw,
+            &mut pitch,
+            &mut mouse_reference_position,
             &mut camera_position,
             &mut camera_rotation,
         );
@@ -299,6 +304,8 @@ pub struct Keybinds {
     pub camera_down: Option<Scancode>,
     pub camera_rotate_left: Option<Scancode>,
     pub camera_rotate_right: Option<Scancode>,
+    pub camera_rotate_up: Option<Scancode>,
+    pub camera_rotate_down: Option<Scancode>,
 }
 
 impl Default for Keybinds {
@@ -312,12 +319,18 @@ impl Default for Keybinds {
             camera_down: Some(Scancode::LShift),
             camera_rotate_left: Some(Scancode::Left),
             camera_rotate_right: Some(Scancode::Right),
+            camera_rotate_up: Some(Scancode::Up),
+            camera_rotate_down: Some(Scancode::Down),
         }
     }
 }
 
 impl Keybinds {
-    pub fn current_state(&self, keyboard_state: &KeyboardState<'_>) -> KeyState {
+    pub fn current_state(
+        &self,
+        keyboard_state: &KeyboardState<'_>,
+        mouse_state: &MouseState,
+    ) -> KeyState {
         KeyState {
             camera_forward: self
                 .camera_forward
@@ -343,6 +356,17 @@ impl Keybinds {
             camera_rotate_right: self
                 .camera_rotate_right
                 .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_rotate_up: self
+                .camera_rotate_up
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_rotate_down: self
+                .camera_rotate_down
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            right_button_pressed: mouse_state.is_mouse_button_pressed(MouseButton::Left),
+            mouse_position: Vector2::new(
+                (mouse_state.x() - (SCREEN_WIDTH / 2) as i32) as f32,
+                (mouse_state.y() - (SCREEN_HEIGHT / 2) as i32) as f32,
+            ),
         }
     }
 }
@@ -358,15 +382,23 @@ pub struct KeyState {
     pub camera_down: bool,
     pub camera_rotate_left: bool,
     pub camera_rotate_right: bool,
+    pub camera_rotate_up: bool,
+    pub camera_rotate_down: bool,
+    pub right_button_pressed: bool,
+    pub mouse_position: Vector2<f32>,
 }
 
 // Move and rotate camera
 fn update(
     dt: f32,
     state: &KeyState,
+    sdl_context: &Sdl,
+    window: &Window,
     yaw: &mut f32,
+    pitch: &mut f32,
+    mouse_reference_position: &mut Option<Vector2<f32>>,
     camera_position: &mut Vector3<f32>,
-    camera_rotation: &mut Matrix3<f32>,
+    camera_rotation: &mut Rotation3<f32>,
 ) {
     let camera_speed = (dt / 1000.0) * CAMERA_MOVEMENT_SPEED;
     if state.camera_forward {
@@ -395,30 +427,38 @@ fn update(
     }
     if state.camera_rotate_left {
         // Rotate camera left
-        *yaw += dt / 1000.0 * CAMERA_ROTATION_SPEED;
-
-        // Update values that don't change
-        camera_rotation[(0, 0)] = yaw.cos();
-        camera_rotation[(2, 0)] = yaw.sin();
-        camera_rotation[(0, 2)] = -yaw.sin();
-        camera_rotation[(2, 2)] = yaw.cos();
+        *yaw -= dt / 1000.0 * CAMERA_ROTATION_SPEED;
     }
     if state.camera_rotate_right {
         // Rotate camera right
-        *yaw -= dt / 1000.0 * CAMERA_ROTATION_SPEED;
-
-        // Update values that don't change
-        camera_rotation[(0, 0)] = yaw.cos();
-        camera_rotation[(2, 0)] = yaw.sin();
-        camera_rotation[(0, 2)] = -yaw.sin();
-        camera_rotation[(2, 2)] = yaw.cos();
+        *yaw += dt / 1000.0 * CAMERA_ROTATION_SPEED;
     }
+    if state.camera_rotate_up {
+        // Rotate camera up
+        *pitch -= dt / 1000.0 * CAMERA_ROTATION_SPEED;
+    }
+    if state.camera_rotate_down {
+        // Rotate camera down
+        *pitch += dt / 1000.0 * CAMERA_ROTATION_SPEED;
+    }
+
+    if let Some(mouse_ref) = mouse_reference_position.as_mut() {
+        *yaw += (state.mouse_position.x - mouse_ref.x) * dt / 1000.0 * CAMERA_MOUSE_ROTATION_SPEED;
+        *pitch +=
+            (state.mouse_position.y - mouse_ref.y) * dt / 1000.0 * CAMERA_MOUSE_ROTATION_SPEED;
+        *mouse_reference_position = None;
+    }
+    if state.right_button_pressed {
+        *mouse_reference_position = Some(state.mouse_position);
+    }
+
+    *camera_rotation = Rotation::from_euler_angles(0.0, *pitch, *yaw);
 }
 
 fn draw(
     canvas: &mut Canvas<Window>,
     camera_position: &Vector3<f32>,
-    camera_rotation: &Matrix3<f32>,
+    camera_rotation: &Rotation3<f32>,
     light_pos: &Vector3<f32>,
 ) {
     canvas.clear();
@@ -426,9 +466,9 @@ fn draw(
         for x in 0..SCREEN_WIDTH as i32 {
             let direction = camera_rotation
                 * Vector3::new(
-                    (x - (SCREEN_WIDTH as i32 / 2)) as f32,
-                    (y - (SCREEN_HEIGHT as i32 / 2)) as f32,
                     FOCAL_LENGTH as f32,
+                    (x - (SCREEN_WIDTH as i32 / 2)) as f32,
+                    (-y + (SCREEN_HEIGHT as i32 / 2)) as f32,
                 );
 
             let mut color = Color::new(0.0, 0.0, 0.0);
