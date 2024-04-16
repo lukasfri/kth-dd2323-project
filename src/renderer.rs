@@ -31,7 +31,7 @@ impl Renderer for Raytracer {
         let (width, height) = canvas.window().drawable_size();
         for y in 0..width as i32 {
             for x in 0..height as i32 {
-                let direction = camera.rotation
+                let direction = camera.rotation()
                     * Vector3::new(
                         camera.focal_length,
                         (x - (width as i32 / 2)) as f32,

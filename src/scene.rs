@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, path::Path};
 
 use nalgebra::{Rotation3, Vector3};
 
@@ -179,9 +179,9 @@ impl Scene {
     }
 
     #[allow(dead_code)]
-    fn load_gltf_model(path: &str) -> Vec<TriMesh> {
+    pub fn load_gltf_scene(path: impl AsRef<Path>) -> Self {
         let mut scenes = easy_gltf::load(path)
-            .expect("Failed to load glTF")
+            .expect("Failed to load glTF file")
             .into_iter();
         let scene = scenes.next().expect("No scenes in glTF file");
         assert!(scenes.next().is_none(), "More than one scene in gltf file");
@@ -208,6 +208,15 @@ impl Scene {
             meshes.push(TriMesh::new(local_triangles));
         }
 
-        meshes
+        Scene {
+            triangles: meshes
+                .into_iter()
+                .flat_map(|a| a.into_triangles())
+                .collect(),
+
+            light_pos: Vector3::new(-0.5, 0.0, 0.7),
+            light_color: Vector3::new(14.0, 14.0, 14.0),
+            indirect_light: Vector3::new(0.5, 0.5, 0.5),
+        }
     }
 }
