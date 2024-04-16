@@ -1,6 +1,11 @@
 use easy_gltf::model::Vertex;
 use nalgebra::{Matrix3, Vector3};
 
+pub mod camera;
+pub mod controls;
+pub mod renderer;
+pub mod scene;
+
 pub struct Ray {
     pub origin: Vector3<f32>,
     pub direction: Vector3<f32>,
