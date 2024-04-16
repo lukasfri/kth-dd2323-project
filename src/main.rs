@@ -159,38 +159,38 @@ fn load_test_model() -> Vec<TriMesh> {
 }
 
 fn load_gltf_model(path: &str) -> Vec<TriMesh> {
-    let scenes = easy_gltf::load(path).expect("Failed to load glTF");
-    for scene in scenes {
-        let mut meshes = Vec::new();
+    let mut scenes = easy_gltf::load(path)
+        .expect("Failed to load glTF")
+        .into_iter();
+    let scene = scenes.next().expect("No scenes in glTF file");
+    assert!(scenes.next().is_none(), "More than one scene in gltf file");
+    let mut meshes = Vec::new();
 
-        for model in scene.models {
-            let mut local_triangles = Vec::new();
+    for model in scene.models {
+        let mut local_triangles = Vec::new();
 
-            // Only support triangle meshes
-            match model.mode() {
-                easy_gltf::model::Mode::Triangles => {
-                    let color = Color::new_from_vector(model.material().get_base_color(Vector2::<
-                        f32,
-                    >::new(
-                        0.0, 0.0
-                    )));
-                    if let Ok(gltf_triangles) = model.triangles() {
-                        for gltf_triangle in gltf_triangles {
-                            let triangle = Triangle::new_from_gltf(gltf_triangle, color);
-                            local_triangles.push(triangle);
-                        }
+        // Only support triangle meshes
+        match model.mode() {
+            easy_gltf::model::Mode::Triangles => {
+                let color = Color::new_from_vector(
+                    model
+                        .material()
+                        .get_base_color(Vector2::<f32>::new(0.0, 0.0)),
+                );
+                if let Ok(gltf_triangles) = model.triangles() {
+                    for gltf_triangle in gltf_triangles {
+                        let triangle = Triangle::new_from_gltf(gltf_triangle, color);
+                        local_triangles.push(triangle);
                     }
                 }
-                _ => {}
             }
-
-            meshes.push(TriMesh::new(local_triangles));
+            _ => {}
         }
 
-        return meshes;
+        meshes.push(TriMesh::new(local_triangles));
     }
 
-    Vec::new()
+    meshes
 }
 
 // ----------------------------------------------------------------------------
@@ -203,7 +203,7 @@ use nalgebra::{Matrix3, Vector3};
 use once_cell::sync::Lazy;
 use sdl2::{
     event::Event,
-    keyboard::{KeyboardState, Keycode},
+    keyboard::{KeyboardState, Keycode, Scancode},
     render::Canvas,
     video::Window,
 };
@@ -213,13 +213,12 @@ const SCREEN_HEIGHT: u32 = 500;
 const FOCAL_LENGTH: u32 = SCREEN_HEIGHT / 2;
 const CAMERA_MOVEMENT_SPEED: f32 = 1.0;
 const CAMERA_ROTATION_SPEED: f32 = 1.0;
-const LIGHT_MOVEMENT_SPEED: f32 = 1.0;
-// float yaw;
 const LIGHT_COLOR: Vector3<f32> = Vector3::new(14.0, 14.0, 14.0);
 const INDRECT_LIGHT: Vector3<f32> = Vector3::new(0.5, 0.5, 0.5);
 
 static TRIANGLES: Lazy<Vec<Triangle>> = Lazy::new(|| {
-    load_gltf_model("./resources/test_model.glb")
+    // load_gltf_model("./resources/test_model.glb")
+    load_test_model()
         .into_iter()
         .flat_map(|a| a.into_triangles())
         .collect()
@@ -252,11 +251,13 @@ fn main() {
     let mut camera_position: Vector3<f32> = Vector3::new(0.0, 0.0, -2.0);
     let mut camera_rotation: Matrix3<f32> =
         Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-    let mut light_pos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
+    let light_pos: Vector3<f32> = Vector3::new(0.0, -0.5, -0.7);
 
     let mut yaw = 0.0;
 
     let mut event_pump = sdl_context.event_pump().unwrap();
+
+    let binds = Keybinds::default();
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -275,11 +276,11 @@ fn main() {
         t = t2;
 
         let keyboard = KeyboardState::new(&event_pump);
+        let state = binds.current_state(&keyboard);
         update(
             dt as f32,
-            &keyboard,
+            &state,
             &mut yaw,
-            &mut light_pos,
             &mut camera_position,
             &mut camera_rotation,
         );
@@ -288,42 +289,112 @@ fn main() {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Keybinds {
+    pub camera_forward: Option<Scancode>,
+    pub camera_backward: Option<Scancode>,
+    pub camera_left: Option<Scancode>,
+    pub camera_right: Option<Scancode>,
+    pub camera_up: Option<Scancode>,
+    pub camera_down: Option<Scancode>,
+    pub camera_rotate_left: Option<Scancode>,
+    pub camera_rotate_right: Option<Scancode>,
+}
+
+impl Default for Keybinds {
+    fn default() -> Self {
+        Self {
+            camera_forward: Some(Scancode::W),
+            camera_backward: Some(Scancode::S),
+            camera_left: Some(Scancode::A),
+            camera_right: Some(Scancode::D),
+            camera_up: Some(Scancode::Space),
+            camera_down: Some(Scancode::LShift),
+            camera_rotate_left: Some(Scancode::Left),
+            camera_rotate_right: Some(Scancode::Right),
+        }
+    }
+}
+
+impl Keybinds {
+    pub fn current_state(&self, keyboard_state: &KeyboardState<'_>) -> KeyState {
+        KeyState {
+            camera_forward: self
+                .camera_forward
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_backward: self
+                .camera_backward
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_left: self
+                .camera_left
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_right: self
+                .camera_right
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_up: self
+                .camera_up
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_down: self
+                .camera_down
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_rotate_left: self
+                .camera_rotate_left
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+            camera_rotate_right: self
+                .camera_rotate_right
+                .map_or(false, |key| keyboard_state.is_scancode_pressed(key)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+
+pub struct KeyState {
+    pub camera_forward: bool,
+    pub camera_backward: bool,
+    pub camera_left: bool,
+    pub camera_right: bool,
+    pub camera_up: bool,
+    pub camera_down: bool,
+    pub camera_rotate_left: bool,
+    pub camera_rotate_right: bool,
+}
+
 // Move and rotate camera
 fn update(
     dt: f32,
-    keyboard_state: &KeyboardState<'_>,
+    state: &KeyState,
     yaw: &mut f32,
-    light_pos: &mut Vector3<f32>,
     camera_position: &mut Vector3<f32>,
     camera_rotation: &mut Matrix3<f32>,
 ) {
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Up) {
-        // cameraPosition += vec3(0, 0, 1).rot() * dt / 1000 * CAMERA_MOVEMENT_SPEED;
-        *camera_position += (*camera_rotation * Vector3::new(0.0, 0.0, 1.0))
-            * (dt / 1000.0)
-            * CAMERA_MOVEMENT_SPEED;
+    let camera_speed = (dt / 1000.0) * CAMERA_MOVEMENT_SPEED;
+    if state.camera_forward {
+        // Move camera forwards
+        *camera_position += (*camera_rotation * Vector3::x()) * camera_speed;
     }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Down) {
+    if state.camera_backward {
         // Move camera backward
-        *camera_position += (*camera_rotation * Vector3::new(0.0, 0.0, -1.0))
-            * (dt / 1000.0)
-            * CAMERA_MOVEMENT_SPEED;
+        *camera_position += (*camera_rotation * -Vector3::x()) * camera_speed;
     }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Space) {
+    if state.camera_left {
+        // Move camera left
+        *camera_position += (*camera_rotation * -Vector3::y()) * camera_speed;
+    }
+    if state.camera_right {
+        // Move camera right
+        *camera_position += (*camera_rotation * Vector3::y()) * camera_speed;
+    }
+    if state.camera_up {
         // Move camera up
-        *camera_position += (*camera_rotation * Vector3::new(0.0, -1.0, 0.0))
-            * (dt / 1000.0)
-            * CAMERA_MOVEMENT_SPEED;
+        *camera_position += (*camera_rotation * Vector3::z()) * camera_speed;
     }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::LShift) {
+    if state.camera_down {
         // Move camera down
-        *camera_position += (*camera_rotation * Vector3::new(0.0, 1.0, 0.0))
-            * (dt / 1000.0)
-            * CAMERA_MOVEMENT_SPEED;
+        *camera_position += (*camera_rotation * -Vector3::z()) * camera_speed;
     }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Left) {
+    if state.camera_rotate_left {
         // Rotate camera left
-        // cameraPosition.x -= dt / 1000 * CAMERA_MOVEMENT_SPEED;
         *yaw += dt / 1000.0 * CAMERA_ROTATION_SPEED;
 
         // Update values that don't change
@@ -332,9 +403,8 @@ fn update(
         camera_rotation[(0, 2)] = -yaw.sin();
         camera_rotation[(2, 2)] = yaw.cos();
     }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Right) {
+    if state.camera_rotate_right {
         // Rotate camera right
-        // cameraPosition.x += dt / 1000 * CAMERA_MOVEMENT_SPEED;
         *yaw -= dt / 1000.0 * CAMERA_ROTATION_SPEED;
 
         // Update values that don't change
@@ -342,32 +412,6 @@ fn update(
         camera_rotation[(2, 0)] = yaw.sin();
         camera_rotation[(0, 2)] = -yaw.sin();
         camera_rotation[(2, 2)] = yaw.cos();
-    }
-
-    // Move light position
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::W) {
-        // Move light forward
-        light_pos.z += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
-    }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::S) {
-        // Move light backwards
-        light_pos.z -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
-    }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::A) {
-        // Move light left
-        light_pos.x -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
-    }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::D) {
-        // Move light right
-        light_pos.x += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
-    }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::Q) {
-        // Move light up
-        light_pos.y -= (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
-    }
-    if keyboard_state.is_scancode_pressed(sdl2::keyboard::Scancode::E) {
-        // Move light down
-        light_pos.y += (dt / 1000.0) * LIGHT_MOVEMENT_SPEED;
     }
 }
 
