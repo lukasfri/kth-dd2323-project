@@ -10,40 +10,54 @@ use sdl2::{
     event::Event,
     keyboard::{KeyboardState, Keycode},
     mouse::MouseState,
+    render::Canvas,
+    video::Window,
+    Sdl, TimerSubsystem,
 };
 
 fn main() -> anyhow::Result<()> {
     let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
 
     const SCREEN_SIZE: Vector2<u32> = Vector2::new(500, 500);
+    let canvas = setup_canvas(&sdl_context, SCREEN_SIZE);
+    let timer = sdl_context.timer().unwrap();
+
+    let focal_length: u32 = SCREEN_SIZE.y / 2;
+    let camera = Camera::new(focal_length as f32, Vector3::new(-4.0, 0.0, 0.0));
+
+    // let scene = Scene::load_cornell_box();
+    let scene = Scene::load_gltf_scene("assets/test_model.glb");
+    program_loop(sdl_context, scene, canvas, camera, timer)
+}
+
+fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> {
+    let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Wave Function Collapse", SCREEN_SIZE.x, SCREEN_SIZE.y)
+        .window("Wave Function Collapse", screen_size.x, screen_size.y)
         .position_centered()
         .build()
         .unwrap();
 
     let mut canvas = window.into_canvas().build().unwrap();
-
     canvas.set_draw_color(Color::BLUE.to_sdl());
     canvas.clear();
-
     canvas.present();
 
-    let timer = sdl_context.timer().unwrap();
+    canvas
+}
+
+fn program_loop(
+    sdl_context: Sdl,
+    scene: Scene,
+    mut canvas: Canvas<Window>,
+    mut camera: Camera,
+    timer: TimerSubsystem,
+) -> anyhow::Result<()> {
+    let mut mouse_reference_position: Option<Vector2<f32>> = None;
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    let binds = Keybinds::default();
     let mut t = timer.ticks();
 
-    let focal_length: u32 = SCREEN_SIZE.y / 2;
-    let mut camera = Camera::new(focal_length as f32, Vector3::new(-4.0, 0.0, 0.0));
-
-    // let scene = Scene::load_cornell_box();
-    let scene = Scene::load_gltf_scene("assets/test_model.glb");
-
-    let mut mouse_reference_position: Option<Vector2<f32>> = None;
-
-    let mut event_pump = sdl_context.event_pump().unwrap();
-
-    let binds = Keybinds::default();
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
