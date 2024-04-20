@@ -1,20 +1,12 @@
-use std::{
-    f32::consts::PI,
-    fs::File,
-    io::{prelude::*, BufReader},
-};
-
-use anyhow::{bail, ensure};
 use kth_dd2323_project::{
     camera::Camera,
     controls::{ControlState, Keybinds},
-    model_loader::ModelLoader,
     renderer::{Raytracer, Renderer},
     scene::Scene,
-    tile_data::TileData,
+    wave_function_collapse::WFC,
     Color,
 };
-use nalgebra::{Rotation3, Vector2, Vector3};
+use nalgebra::{Vector2, Vector3};
 use sdl2::{
     event::Event,
     keyboard::{KeyboardState, Keycode},
@@ -36,16 +28,11 @@ fn main() -> anyhow::Result<()> {
 
     // let scene = Scene::load_cornell_box();
     let mut scene = Scene::new();
-    match load_tiles() {
-        Ok(tiles) => {
-            scene.instantiate_model(&tiles[1].model, Vector3::new(2.0, 0.0, 0.0));
-            scene.instantiate_model(&tiles[2].model, Vector3::new(1.0, -1.0, 0.0));
-            scene.instantiate_model(&tiles[3].model, Vector3::new(1.0, 0.0, 0.0));
-            scene.instantiate_model(&tiles[4].model, Vector3::new(1.0, 1.0, 0.0));
-            scene.instantiate_model(&tiles[5].model, Vector3::new(1.0, 2.0, 0.0));
+    const MAP_SIZE: usize = 10; // Width/height of map
+    let mut wfc = WFC::new(&mut scene, MAP_SIZE);
 
-            program_loop(sdl_context, scene, canvas, camera, timer)
-        }
+    match wfc.place_tiles() {
+        Ok(()) => program_loop(sdl_context, scene, canvas, camera, timer),
         Err(err) => Err(err),
     }
 }
@@ -64,84 +51,6 @@ fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> 
     canvas.present();
 
     canvas
-}
-
-fn load_tiles() -> anyhow::Result<Vec<TileData>> {
-    let mut tiles: Vec<TileData> = vec![];
-    let model_loader = ModelLoader {};
-
-    match File::open("./config.txt") {
-        Ok(file) => {
-            let reader = BufReader::new(file);
-            for (index, line) in reader.lines().enumerate() {
-                match line {
-                    Ok(line) => {
-                        // Ignore comments
-                        if line.starts_with('#') {
-                            continue;
-                        }
-
-                        // Validate inputs
-                        let values = line
-                            .replace(' ', "")
-                            .split(',')
-                            .map(|s| s.to_string())
-                            .collect::<Vec<String>>();
-                        ensure!(
-                            values.len() == 6,
-                            format!(
-                                "Line {} \"{}\" does not contain all values required",
-                                index + 1,
-                                line
-                            )
-                        );
-                        ensure!(
-                            values[5] == "true" || values[5] == "false",
-                            format!(
-                                "On line {} the rotatable value can only be true or false",
-                                index + 1
-                            )
-                        );
-
-                        // Load models
-                        let rotation_angles: Vec<Rotation3<f32>> = match values[5].as_str() {
-                            "true" => vec![
-                                Rotation3::from_euler_angles(0.0, 0.0, 0.0),
-                                Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
-                                Rotation3::from_euler_angles(0.0, 0.0, PI),
-                                Rotation3::from_euler_angles(0.0, 0.0, 3.0 / 2.0 * PI),
-                            ],
-                            _ => vec![Rotation3::from_euler_angles(0.0, 0.0, 0.0)],
-                        };
-
-                        // Store each rotation as seperate model
-                        for (index, rotation) in rotation_angles.into_iter().enumerate() {
-                            match model_loader
-                                .load_gltf_model(format!("assets/{}", &values[0]), rotation)
-                            {
-                                Ok(model) => {
-                                    let tile = TileData {
-                                        model,
-                                        up_edge: values[1 + (index % 4)].clone(),
-                                        right_edge: values[1 + ((index + 1) % 4)].clone(),
-                                        down_edge: values[1 + ((index + 2) % 4)].clone(),
-                                        left_edge: values[1 + ((index + 3) % 4)].clone(),
-                                    };
-                                    tiles.push(tile);
-                                }
-                                Err(err) => return Err(err),
-                            }
-                        }
-                    }
-                    Err(err) => return Err(anyhow::Error::from(err)),
-                }
-            }
-        }
-        Err(_) => {
-            bail!("Could not find config file config.txt")
-        }
-    }
-    Ok(tiles)
 }
 
 fn program_loop(

@@ -5,9 +5,14 @@ use nalgebra::{Rotation3, Vector3};
 
 use crate::{Color, TriMesh, Triangle};
 
+#[derive(Default)]
 pub struct ModelLoader {}
 
 impl ModelLoader {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     /// Defines a simple test model: The Cornel Box
     ///
     /// Loads the Cornell Box. It is scaled to fill the volume:

@@ -515,6 +515,7 @@ dependencies = [
  "easy-gltf",
  "nalgebra",
  "once_cell",
+ "rand",
  "rayon",
  "sdl2",
 ]

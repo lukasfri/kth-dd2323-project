@@ -6,7 +6,9 @@ pub mod controls;
 pub mod model_loader;
 pub mod renderer;
 pub mod scene;
+pub mod tile;
 pub mod tile_data;
+pub mod wave_function_collapse;
 
 pub struct Ray {
     pub origin: Vector3<f32>,
