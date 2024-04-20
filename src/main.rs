@@ -8,6 +8,7 @@ use anyhow::{bail, ensure};
 use kth_dd2323_project::{
     camera::Camera,
     controls::{ControlState, Keybinds},
+    model_loader::ModelLoader,
     renderer::{Raytracer, Renderer},
     scene::Scene,
     tile_data::TileData,
@@ -31,12 +32,20 @@ fn main() -> anyhow::Result<()> {
     let timer = sdl_context.timer().unwrap();
 
     let focal_length: u32 = SCREEN_SIZE.y / 2;
-    let camera = Camera::new(focal_length as f32, Vector3::new(-4.0, 0.0, 0.0));
+    let camera = Camera::new(focal_length as f32, Vector3::new(-1.0, 0.0, 1.0));
 
     // let scene = Scene::load_cornell_box();
-    let scene = Scene::new();
-    match load_tiles(&scene) {
-        Ok(_) => program_loop(sdl_context, scene, canvas, camera, timer),
+    let mut scene = Scene::new();
+    match load_tiles() {
+        Ok(tiles) => {
+            scene.instantiate_model(&tiles[1].model, Vector3::new(2.0, 0.0, 0.0));
+            scene.instantiate_model(&tiles[2].model, Vector3::new(1.0, -1.0, 0.0));
+            scene.instantiate_model(&tiles[3].model, Vector3::new(1.0, 0.0, 0.0));
+            scene.instantiate_model(&tiles[4].model, Vector3::new(1.0, 1.0, 0.0));
+            scene.instantiate_model(&tiles[5].model, Vector3::new(1.0, 2.0, 0.0));
+
+            program_loop(sdl_context, scene, canvas, camera, timer)
+        }
         Err(err) => Err(err),
     }
 }
@@ -57,8 +66,9 @@ fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> 
     canvas
 }
 
-fn load_tiles(scene: &Scene) -> anyhow::Result<()> {
+fn load_tiles() -> anyhow::Result<Vec<TileData>> {
     let mut tiles: Vec<TileData> = vec![];
+    let model_loader = ModelLoader {};
 
     match File::open("./config.txt") {
         Ok(file) => {
@@ -96,17 +106,18 @@ fn load_tiles(scene: &Scene) -> anyhow::Result<()> {
                         // Load models
                         let rotation_angles: Vec<Rotation3<f32>> = match values[5].as_str() {
                             "true" => vec![
+                                Rotation3::from_euler_angles(0.0, 0.0, 0.0),
                                 Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
                                 Rotation3::from_euler_angles(0.0, 0.0, PI),
                                 Rotation3::from_euler_angles(0.0, 0.0, 3.0 / 2.0 * PI),
-                                Rotation3::from_euler_angles(0.0, 0.0, 2.0 * PI),
                             ],
                             _ => vec![Rotation3::from_euler_angles(0.0, 0.0, 0.0)],
                         };
 
                         // Store each rotation as seperate model
                         for (index, rotation) in rotation_angles.into_iter().enumerate() {
-                            match scene.load_gltf_model(format!("assets/{}", &values[0]), rotation)
+                            match model_loader
+                                .load_gltf_model(format!("assets/{}", &values[0]), rotation)
                             {
                                 Ok(model) => {
                                     let tile = TileData {
@@ -130,7 +141,7 @@ fn load_tiles(scene: &Scene) -> anyhow::Result<()> {
             bail!("Could not find config file config.txt")
         }
     }
-    Ok(())
+    Ok(tiles)
 }
 
 fn program_loop(

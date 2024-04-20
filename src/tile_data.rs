@@ -1,5 +1,6 @@
 use crate::Triangle;
 
+#[derive(Debug)]
 pub struct TileData {
     pub model: Vec<Triangle>,
     pub up_edge: String,

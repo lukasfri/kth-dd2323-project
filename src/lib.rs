@@ -3,6 +3,7 @@ use nalgebra::{Matrix3, Rotation3, Vector3};
 
 pub mod camera;
 pub mod controls;
+pub mod model_loader;
 pub mod renderer;
 pub mod scene;
 pub mod tile_data;
@@ -79,6 +80,15 @@ impl Triangle {
         };
         triangle.update_normal();
         triangle
+    }
+
+    fn translate(&self, offset: Vector3<f32>) -> Triangle {
+        Triangle::new(
+            self.v0 + offset,
+            self.v1 + offset,
+            self.v2 + offset,
+            self.color,
+        )
     }
 
     fn calculate_normal(v0: Vector3<f32>, v1: Vector3<f32>, v2: Vector3<f32>) -> Vector3<f32> {
