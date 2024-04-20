@@ -1,4 +1,5 @@
 use std::{
+    f32::consts::PI,
     fs::File,
     io::{prelude::*, BufReader},
 };
@@ -12,7 +13,7 @@ use kth_dd2323_project::{
     tile_data::TileData,
     Color,
 };
-use nalgebra::{Vector2, Vector3};
+use nalgebra::{Rotation3, Vector2, Vector3};
 use sdl2::{
     event::Event,
     keyboard::{KeyboardState, Keycode},
@@ -92,30 +93,44 @@ fn load_tiles(scene: &Scene) -> anyhow::Result<()> {
                             )
                         );
 
-                        // Load model
-                        match scene.load_gltf_model(format!("assets/{}", &values[0])) {
-                            Ok(model) => {
-                                let tile = TileData {
-                                    model,
-                                    up_edge: values[1].clone(),
-                                    right_edge: values[2].clone(),
-                                    down_edge: values[3].clone(),
-                                    left_edge: values[4].clone(),
-                                };
-                                tiles.push(tile);
+                        // Load models
+                        let rotation_angles: Vec<Rotation3<f32>> = match values[5].as_str() {
+                            "true" => vec![
+                                Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
+                                Rotation3::from_euler_angles(0.0, 0.0, PI),
+                                Rotation3::from_euler_angles(0.0, 0.0, 3.0 / 2.0 * PI),
+                                Rotation3::from_euler_angles(0.0, 0.0, 2.0 * PI),
+                            ],
+                            _ => vec![Rotation3::from_euler_angles(0.0, 0.0, 0.0)],
+                        };
+
+                        // Store each rotation as seperate model
+                        for (index, rotation) in rotation_angles.into_iter().enumerate() {
+                            match scene.load_gltf_model(format!("assets/{}", &values[0]), rotation)
+                            {
+                                Ok(model) => {
+                                    let tile = TileData {
+                                        model,
+                                        up_edge: values[1 + (index % 4)].clone(),
+                                        right_edge: values[1 + ((index + 1) % 4)].clone(),
+                                        down_edge: values[1 + ((index + 2) % 4)].clone(),
+                                        left_edge: values[1 + ((index + 3) % 4)].clone(),
+                                    };
+                                    tiles.push(tile);
+                                }
+                                Err(err) => return Err(err),
                             }
-                            Err(err) => return Err(err),
                         }
                     }
                     Err(err) => return Err(anyhow::Error::from(err)),
                 }
             }
-            Ok(())
         }
         Err(_) => {
             bail!("Could not find config file config.txt")
         }
     }
+    Ok(())
 }
 
 fn program_loop(

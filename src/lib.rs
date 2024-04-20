@@ -1,5 +1,5 @@
 use easy_gltf::model::Vertex;
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::{Matrix3, Rotation3, Vector3};
 
 pub mod camera;
 pub mod controls;
@@ -54,23 +54,26 @@ impl Triangle {
         }
     }
 
-    pub fn new_from_gltf(vertices: [Vertex; 3], color: Color) -> Self {
+    pub fn new_from_gltf(vertices: [Vertex; 3], rotation: Rotation3<f32>, color: Color) -> Self {
         let mut triangle = Self {
-            v0: Vector3::new(
-                vertices[0].position.x,
-                vertices[0].position.y,
-                vertices[0].position.z,
-            ),
-            v1: Vector3::new(
-                vertices[1].position.x,
-                vertices[1].position.y,
-                vertices[1].position.z,
-            ),
-            v2: Vector3::new(
-                vertices[2].position.x,
-                vertices[2].position.y,
-                vertices[2].position.z,
-            ),
+            v0: rotation
+                * Vector3::new(
+                    vertices[0].position.x,
+                    vertices[0].position.y,
+                    vertices[0].position.z,
+                ),
+            v1: rotation
+                * Vector3::new(
+                    vertices[1].position.x,
+                    vertices[1].position.y,
+                    vertices[1].position.z,
+                ),
+            v2: rotation
+                * Vector3::new(
+                    vertices[2].position.x,
+                    vertices[2].position.y,
+                    vertices[2].position.z,
+                ),
             color,
             normal: Vector3::zeros(),
         };

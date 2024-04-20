@@ -186,7 +186,11 @@ impl Scene {
     }
 
     #[allow(dead_code)]
-    pub fn load_gltf_model(&self, path: impl AsRef<Path>) -> anyhow::Result<Vec<Triangle>> {
+    pub fn load_gltf_model(
+        &self,
+        path: impl AsRef<Path>,
+        rotation: Rotation3<f32>,
+    ) -> anyhow::Result<Vec<Triangle>> {
         let model = easy_gltf::load(&path);
         match model {
             Ok(model) => {
@@ -207,7 +211,8 @@ impl Scene {
                         );
                         if let Ok(gltf_triangles) = model.triangles() {
                             for gltf_triangle in gltf_triangles {
-                                let triangle = Triangle::new_from_gltf(gltf_triangle, color);
+                                let triangle =
+                                    Triangle::new_from_gltf(gltf_triangle, rotation, color);
                                 local_triangles.push(triangle);
                             }
                         }
