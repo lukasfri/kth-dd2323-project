@@ -4,12 +4,12 @@ use rand::{
     thread_rng,
 };
 
-use crate::{scene::Scene, tile_data::TileData};
+use crate::{scene::Scene, tile_data::TileData, Direction};
 
 pub struct Tile<'a> {
     pub data: Option<&'a TileData>,
     pub possible_tiles: Vec<&'a TileData>,
-    pub tile_position: Vector2<usize>,
+    pub tile_position: Vector2<usize>, // Position in grid
 }
 
 impl<'a> Tile<'a> {
@@ -37,5 +37,17 @@ impl<'a> Tile<'a> {
                 self.tile_position.y as f32,
             ),
         );
+    }
+
+    // Remove options after neighbouring tile has changed
+    // Direction is the the direction of this tiles edge that should be checked
+    // Edge is the new edge type of that edge
+    pub fn remove_options(&mut self, direction: Direction, edge: &str) {
+        self.possible_tiles = self
+            .possible_tiles
+            .iter()
+            .copied()
+            .filter(|tile| tile.check_edge(direction, edge))
+            .collect::<Vec<&'a TileData>>();
     }
 }

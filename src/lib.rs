@@ -1,5 +1,5 @@
 use easy_gltf::model::Vertex;
-use nalgebra::{Matrix3, Rotation3, Vector3};
+use nalgebra::{Matrix3, Rotation3, Vector2, Vector3};
 
 pub mod camera;
 pub mod controls;
@@ -181,5 +181,44 @@ impl Color {
             (self.0.y * 255.0) as u8,
             (self.0.z * 255.0) as u8,
         )
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Direction {
+    Up,
+    Right,
+    Down,
+    Left,
+}
+
+impl Direction {
+    pub fn get_vector(&self) -> Vector2<i32> {
+        match self {
+            Direction::Up => Vector2::new(0, 1),
+            Direction::Right => Vector2::new(1, 0),
+            Direction::Down => Vector2::new(0, -1),
+            Direction::Left => Vector2::new(-1, 0),
+        }
+    }
+
+    pub fn get_opposite(&self) -> Direction {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Right => Direction::Left,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+        }
+    }
+
+    pub fn iterator() -> impl Iterator<Item = Direction> {
+        [
+            Direction::Up,
+            Direction::Right,
+            Direction::Down,
+            Direction::Left,
+        ]
+        .iter()
+        .copied()
     }
 }

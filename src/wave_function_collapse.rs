@@ -7,7 +7,13 @@ use std::{
 use anyhow::{bail, ensure};
 use nalgebra::{Rotation3, Vector2};
 
-use crate::{model_loader::ModelLoader, scene::Scene, tile::Tile, tile_data::TileData};
+use crate::{
+    model_loader::ModelLoader,
+    scene::Scene,
+    tile::{self, Tile},
+    tile_data::TileData,
+    Direction,
+};
 
 pub struct WFC<'a> {
     map_size: usize,
@@ -33,11 +39,33 @@ impl<'a> WFC<'a> {
                 }
 
                 // Collapse first tile
-                tiles[0].collapse(self.scene);
+                self.collapse_tile(&mut tiles, 0);
 
                 Ok(())
             }
             Err(err) => Err(err),
+        }
+    }
+
+    fn collapse_tile(&mut self, tiles: &mut [Tile], tile_index: usize) {
+        tiles[tile_index].collapse(self.scene);
+
+        // Update neighbours
+        for direction in Direction::iterator() {
+            let neighbour_position = Vector2::<i32>::new(
+                tiles[tile_index].tile_position.x as i32,
+                tiles[tile_index].tile_position.y as i32,
+            ) + direction.get_vector();
+            if self.within_grid(neighbour_position) {
+                let neighbour_index = self.index2dto1d(Vector2::<usize>::new(
+                    neighbour_position.x as usize,
+                    neighbour_position.y as usize,
+                ));
+                if let Some(tile_data) = tiles[tile_index].data {
+                    tiles[neighbour_index]
+                        .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
+                }
+            }
         }
     }
 
@@ -126,5 +154,12 @@ impl<'a> WFC<'a> {
 
     fn index1dto2d(&self, index: usize) -> Vector2<usize> {
         Vector2::<usize>::new(index % self.map_size, index / self.map_size)
+    }
+
+    fn within_grid(&self, index: Vector2<i32>) -> bool {
+        index.x >= 0
+            && index.y >= 0
+            && index.x < self.map_size as i32
+            && index.y < self.map_size as i32
     }
 }
