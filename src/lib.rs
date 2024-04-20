@@ -5,6 +5,7 @@ pub mod camera;
 pub mod controls;
 pub mod renderer;
 pub mod scene;
+pub mod tile_data;
 
 pub struct Ray {
     pub origin: Vector3<f32>,

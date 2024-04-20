@@ -1,2 +1,3 @@
 # model, up-edge, right-edge, down-edge, left-edge, rotatable
 grass.glb, grass, grass, grass, grass, false
+pond.glb, grass, grass, grass, grass, true

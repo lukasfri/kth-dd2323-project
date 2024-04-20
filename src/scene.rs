@@ -1,5 +1,6 @@
 use std::{f32::consts::PI, path::Path};
 
+use anyhow::bail;
 use nalgebra::{Rotation3, Vector3};
 
 use crate::{Color, TriMesh, Triangle};
@@ -12,6 +13,12 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
     /// Defines a simple test model: The Cornel Box
     ///
     /// Loads the Cornell Box. It is scaled to fill the volume:
@@ -179,41 +186,50 @@ impl Scene {
     }
 
     #[allow(dead_code)]
-    pub fn load_gltf_scene(path: impl AsRef<Path>) -> Self {
-        let mut scenes = easy_gltf::load(path)
-            .expect("Failed to load glTF file")
-            .into_iter();
-        let scene = scenes.next().expect("No scenes in glTF file");
-        assert!(scenes.next().is_none(), "More than one scene in gltf file");
-        let mut meshes = Vec::new();
+    pub fn load_gltf_model(&self, path: impl AsRef<Path>) -> anyhow::Result<Vec<Triangle>> {
+        let model = easy_gltf::load(&path);
+        match model {
+            Ok(model) => {
+                let mut scenes = model.into_iter();
+                let scene = scenes.next().expect("No scenes in glTF file");
+                assert!(scenes.next().is_none(), "More than one scene in gltf file");
+                let mut meshes = Vec::new();
 
-        for model in scene.models {
-            let mut local_triangles = Vec::new();
+                for model in scene.models {
+                    let mut local_triangles = Vec::new();
 
-            // Only support triangle meshes
-            if model.mode() == easy_gltf::model::Mode::Triangles {
-                let color = Color::new_from_vector(
-                    model
-                        .material()
-                        .get_base_color(cgmath::Vector2::<f32>::new(0.0, 0.0)),
-                );
-                if let Ok(gltf_triangles) = model.triangles() {
-                    for gltf_triangle in gltf_triangles {
-                        let triangle = Triangle::new_from_gltf(gltf_triangle, color);
-                        local_triangles.push(triangle);
+                    // Only support triangle meshes
+                    if model.mode() == easy_gltf::model::Mode::Triangles {
+                        let color = Color::new_from_vector(
+                            model
+                                .material()
+                                .get_base_color(cgmath::Vector2::<f32>::new(0.0, 0.0)),
+                        );
+                        if let Ok(gltf_triangles) = model.triangles() {
+                            for gltf_triangle in gltf_triangles {
+                                let triangle = Triangle::new_from_gltf(gltf_triangle, color);
+                                local_triangles.push(triangle);
+                            }
+                        }
                     }
+
+                    meshes.push(TriMesh::new(local_triangles));
                 }
+
+                Ok(meshes
+                    .into_iter()
+                    .flat_map(|a| a.into_triangles())
+                    .collect())
             }
-
-            meshes.push(TriMesh::new(local_triangles));
+            Err(_) => bail!(format!("Could not load model {:?}", &path.as_ref())),
         }
+    }
+}
 
-        Scene {
-            triangles: meshes
-                .into_iter()
-                .flat_map(|a| a.into_triangles())
-                .collect(),
-
+impl Default for Scene {
+    fn default() -> Self {
+        Self {
+            triangles: vec![],
             light_pos: Vector3::new(-0.5, 0.0, 0.7),
             light_color: Vector3::new(14.0, 14.0, 14.0),
             indirect_light: Vector3::new(0.5, 0.5, 0.5),

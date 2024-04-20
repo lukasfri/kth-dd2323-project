@@ -1,8 +1,15 @@
+use std::{
+    fs::File,
+    io::{prelude::*, BufReader},
+};
+
+use anyhow::{bail, ensure};
 use kth_dd2323_project::{
     camera::Camera,
     controls::{ControlState, Keybinds},
     renderer::{Raytracer, Renderer},
     scene::Scene,
+    tile_data::TileData,
     Color,
 };
 use nalgebra::{Vector2, Vector3};
@@ -26,8 +33,11 @@ fn main() -> anyhow::Result<()> {
     let camera = Camera::new(focal_length as f32, Vector3::new(-4.0, 0.0, 0.0));
 
     // let scene = Scene::load_cornell_box();
-    let scene = Scene::load_gltf_scene("assets/test_model.glb");
-    program_loop(sdl_context, scene, canvas, camera, timer)
+    let scene = Scene::new();
+    match load_tiles(&scene) {
+        Ok(_) => program_loop(sdl_context, scene, canvas, camera, timer),
+        Err(err) => Err(err),
+    }
 }
 
 fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> {
@@ -44,6 +54,68 @@ fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> 
     canvas.present();
 
     canvas
+}
+
+fn load_tiles(scene: &Scene) -> anyhow::Result<()> {
+    let mut tiles: Vec<TileData> = vec![];
+
+    match File::open("./config.txt") {
+        Ok(file) => {
+            let reader = BufReader::new(file);
+            for (index, line) in reader.lines().enumerate() {
+                match line {
+                    Ok(line) => {
+                        // Ignore comments
+                        if line.starts_with('#') {
+                            continue;
+                        }
+
+                        // Validate inputs
+                        let values = line
+                            .replace(' ', "")
+                            .split(',')
+                            .map(|s| s.to_string())
+                            .collect::<Vec<String>>();
+                        ensure!(
+                            values.len() == 6,
+                            format!(
+                                "Line {} \"{}\" does not contain all values required",
+                                index + 1,
+                                line
+                            )
+                        );
+                        ensure!(
+                            values[5] == "true" || values[5] == "false",
+                            format!(
+                                "On line {} the rotatable value can only be true or false",
+                                index + 1
+                            )
+                        );
+
+                        // Load model
+                        match scene.load_gltf_model(format!("assets/{}", &values[0])) {
+                            Ok(model) => {
+                                let tile = TileData {
+                                    model,
+                                    up_edge: values[1].clone(),
+                                    right_edge: values[2].clone(),
+                                    down_edge: values[3].clone(),
+                                    left_edge: values[4].clone(),
+                                };
+                                tiles.push(tile);
+                            }
+                            Err(err) => return Err(err),
+                        }
+                    }
+                    Err(err) => return Err(anyhow::Error::from(err)),
+                }
+            }
+            Ok(())
+        }
+        Err(_) => {
+            bail!("Could not find config file config.txt")
+        }
+    }
 }
 
 fn program_loop(
