@@ -20,23 +20,18 @@ pub enum PlacementStrategy {
 pub struct WFC<'a> {
     map_size: usize,
     scene: &'a mut Scene,
-    max_placement_iterations: u32,
 }
 
 impl<'a> WFC<'a> {
     pub fn new(scene: &'a mut Scene, map_size: usize) -> Self {
-        WFC {
-            map_size,
-            scene,
-            max_placement_iterations: 500,
-        }
+        WFC { map_size, scene }
     }
 
     // Where the actual Wave Function Collapse logic happens
     pub fn place_tiles(&mut self, placement_strategy: &PlacementStrategy) -> anyhow::Result<()> {
         // TODO: continue until filled map
         match self.load_tiles() {
-            Ok(tile_datas) => {
+            Ok((max_iterations, tile_datas)) => {
                 let possible_tiles: Vec<&TileData> = tile_datas.iter().collect();
 
                 // Fill tiles list with all possibilities
@@ -54,21 +49,25 @@ impl<'a> WFC<'a> {
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
+                        max_iterations,
                     ),
                     PlacementStrategy::Growing => self.growing_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
+                        max_iterations,
                     ),
                     PlacementStrategy::Ordered => self.ordered_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
+                        max_iterations,
                     ),
                     PlacementStrategy::LeastEntropy => self.least_entropy_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
+                        max_iterations,
                     ),
                 }
 
@@ -118,11 +117,24 @@ impl<'a> WFC<'a> {
         uncollapsed_tiles.remove(&center_tile_index);
     }
 
-    fn load_tiles(&self) -> anyhow::Result<Vec<TileData>> {
+    fn load_tiles(&self) -> anyhow::Result<(u32, Vec<TileData>)> {
+        let mut max_iterations: u32 = 100;
+        let mut tileset_path: String = "".to_owned();
+
+        match self.read_config_file(&mut max_iterations, &mut tileset_path) {
+            Ok(_) => match self.read_tileset_config_file(&mut tileset_path) {
+                Ok(tiles) => Ok((max_iterations, tiles)),
+                Err(err) => Err(err),
+            },
+            Err(err) => Err(err),
+        }
+    }
+
+    fn read_tileset_config_file(&self, tileset_path: &mut String) -> anyhow::Result<Vec<TileData>> {
         let mut tiles: Vec<TileData> = vec![];
         let model_loader = ModelLoader::new();
 
-        match File::open("./config.txt") {
+        match File::open(format!("{}/tiles_config.txt", tileset_path)) {
             Ok(file) => {
                 let reader = BufReader::new(file);
                 for (index, line) in reader.lines().enumerate() {
@@ -181,9 +193,10 @@ impl<'a> WFC<'a> {
 
                             // Store each rotation as seperate model
                             for (index, rotation) in rotation_angles.into_iter().enumerate() {
-                                match model_loader
-                                    .load_gltf_model(format!("assets/{}", &values[0]), rotation)
-                                {
+                                match model_loader.load_gltf_model(
+                                    format!("{}/{}", tileset_path, &values[0]),
+                                    rotation,
+                                ) {
                                     Ok(model) => {
                                         let tile = TileData {
                                             model,
@@ -204,10 +217,92 @@ impl<'a> WFC<'a> {
                 }
             }
             Err(_) => {
-                bail!("Could not find config file config.txt")
+                bail!(format!(
+                    "Could not find config file {}/tiles_config.txt",
+                    tileset_path
+                ))
             }
         }
+
         Ok(tiles)
+    }
+
+    fn read_config_file(
+        &self,
+        max_iterations: &mut u32,
+        tileset_path: &mut String,
+    ) -> anyhow::Result<()> {
+        const CONFIG_FILE_PATH: &str = "./config.txt";
+
+        match File::open(CONFIG_FILE_PATH) {
+            Ok(file) => {
+                // Read values
+                let reader = BufReader::new(file);
+                for (index, line) in reader.lines().enumerate() {
+                    match line {
+                        Ok(line) => {
+                            // Ignore comments
+                            if line.starts_with('#') {
+                                continue;
+                            }
+                            print!("{}", line);
+                            let parts = line
+                                .replace(' ', "")
+                                .split('=')
+                                .map(|s| s.to_string())
+                                .collect::<Vec<String>>();
+
+                            ensure!(parts.len() == 2 && parts[0].as_str() != "" && parts[1].as_str() != "", format!("Error in {} on line {}. The config file accepts lines in the format of KEY=VALUE", CONFIG_FILE_PATH, index + 1));
+
+                            // Read and validate options
+                            match parts[0].as_str() {
+                                "tile_set" => *tileset_path = parts[1].clone(),
+                                "max_iterations" => match parts[1].parse::<u32>() {
+                                    Ok(max) => {
+                                        if (100..=10000).contains(&max) {
+                                            *max_iterations = max
+                                        } else {
+                                            bail!(format!(
+                                                "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
+                                                CONFIG_FILE_PATH,
+                                                index + 1,
+                                                parts[1]
+                                            ))
+                                        }
+                                    }
+                                    Err(_) => bail!(format!(
+                                        "Error in {} on line {}. {} is not a valid number",
+                                        CONFIG_FILE_PATH,
+                                        index + 1,
+                                        parts[1]
+                                    )),
+                                },
+                                _ => bail!(format!(
+                                    "Error in {} on line {}. {} is not a option",
+                                    CONFIG_FILE_PATH,
+                                    index + 1,
+                                    parts[0]
+                                )),
+                            }
+                        }
+                        Err(err) => return Err(anyhow::Error::from(err)),
+                    }
+                }
+
+                // Make sure obligatory options have been set
+                if tileset_path.as_str() == "" {
+                    bail!(format!(
+                        "Error in {}. Option tileset_path has not been set",
+                        CONFIG_FILE_PATH,
+                    ))
+                }
+            }
+            Err(_) => {
+                bail!(format!("Could not find config file {}", CONFIG_FILE_PATH))
+            }
+        }
+
+        Ok(())
     }
 
     fn index2dto1d(&self, index: Vector2<usize>) -> usize {
@@ -232,10 +327,11 @@ impl<'a> WFC<'a> {
         tiles: &mut [Tile],
         uncollapsed_tiles: &mut HashSet<usize>,
         iterations: &mut u32,
+        max_iterations: u32,
     ) {
         self.collapse_center_tile(tiles, uncollapsed_tiles);
 
-        while *iterations < self.max_placement_iterations && !uncollapsed_tiles.is_empty() {
+        while *iterations < max_iterations && !uncollapsed_tiles.is_empty() {
             let choosen_tile = *uncollapsed_tiles.iter().next().expect("Set is not empty");
             uncollapsed_tiles.remove(&choosen_tile);
             self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile);
@@ -249,6 +345,7 @@ impl<'a> WFC<'a> {
         tiles: &mut [Tile],
         uncollapsed_tiles: &mut HashSet<usize>,
         iterations: &mut u32,
+        max_iterations: u32,
     ) {
         let mut tiles_queue = VecDeque::<usize>::new();
         tiles_queue.push_back(
@@ -256,7 +353,7 @@ impl<'a> WFC<'a> {
         );
 
         while !tiles_queue.is_empty()
-            && *iterations < self.max_placement_iterations
+            && *iterations < max_iterations
             && !uncollapsed_tiles.is_empty()
         {
             let choosen_tile = tiles_queue.pop_front().expect("Queue is not empty");
@@ -293,9 +390,10 @@ impl<'a> WFC<'a> {
         tiles: &mut [Tile],
         uncollapsed_tiles: &mut HashSet<usize>,
         iterations: &mut u32,
+        max_iterations: u32,
     ) {
         for tile_index in 0..(self.map_size * self.map_size) {
-            if *iterations > self.max_placement_iterations {
+            if *iterations > max_iterations {
                 return;
             }
 
@@ -311,10 +409,11 @@ impl<'a> WFC<'a> {
         tiles: &mut [Tile],
         uncollapsed_tiles: &mut HashSet<usize>,
         iterations: &mut u32,
+        max_iterations: u32,
     ) {
         self.collapse_center_tile(tiles, uncollapsed_tiles);
 
-        while *iterations < self.max_placement_iterations && !uncollapsed_tiles.is_empty() {
+        while *iterations < max_iterations && !uncollapsed_tiles.is_empty() {
             // Find element with least entropy
             let mut least_entropy = usize::MAX;
             let mut least_entropy_index = 0;

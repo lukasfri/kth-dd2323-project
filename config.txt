@@ -1,5 +1,3 @@
-# model, weight, up-edge, right-edge, down-edge, left-edge, rotations(1, 2, 4)
-grass.glb, 16, grass, grass, grass, grass, 1
-pond0.glb, 1, grass, grass, grass, grass, 1
-pond1.glb, 1, pond, grass, grass, grass, 4
-pond2.glb, 1, pond, grass, pond, grass, 2
+# Available options: tile_set, max_iterations
+tile_set=./assets/test
+max_iterations=500
