@@ -1,4 +1,4 @@
-# model, up-edge, right-edge, down-edge, left-edge, rotatable
-grass.glb, grass, grass, grass, grass, false
-pond0.glb, grass, grass, grass, grass, false
-pond1.glb, pond, grass, grass, grass, true
+# model, priority, up-edge, right-edge, down-edge, left-edge, rotations(1, 2, 4)
+grass.glb, 2, grass, grass, grass, grass, 1
+pond0.glb, 1, grass, grass, grass, grass, 1
+pond1.glb, 1, pond, grass, grass, grass, 4
