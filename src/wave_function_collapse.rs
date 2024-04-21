@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashSet, VecDeque},
     f32::consts::PI,
     fs::File,
     io::{BufRead, BufReader},
@@ -9,18 +10,30 @@ use nalgebra::{Rotation3, Vector2};
 
 use crate::{model_loader::ModelLoader, scene::Scene, tile::Tile, tile_data::TileData, Direction};
 
+pub enum PlacementStrategy {
+    Random,
+    Growing,
+    Ordered,
+    LeastEntropy,
+}
+
 pub struct WFC<'a> {
     map_size: usize,
     scene: &'a mut Scene,
+    max_placement_iterations: u32,
 }
 
 impl<'a> WFC<'a> {
     pub fn new(scene: &'a mut Scene, map_size: usize) -> Self {
-        WFC { map_size, scene }
+        WFC {
+            map_size,
+            scene,
+            max_placement_iterations: 500,
+        }
     }
 
     // Where the actual Wave Function Collapse logic happens
-    pub fn place_tiles(&mut self) -> anyhow::Result<()> {
+    pub fn place_tiles(&mut self, placement_strategy: &PlacementStrategy) -> anyhow::Result<()> {
         // TODO: continue until filled map
         match self.load_tiles() {
             Ok(tile_datas) => {
@@ -31,9 +44,33 @@ impl<'a> WFC<'a> {
                 for i in 0..(self.map_size * self.map_size) {
                     tiles.push(Tile::new(possible_tiles.clone(), self.index1dto2d(i)));
                 }
+                // Set of indexes of tiles that haven't been collapsed
+                let mut uncollapsed_tiles: HashSet<usize> =
+                    (0..(self.map_size * self.map_size)).collect::<HashSet<usize>>();
+                let mut iterations = 0;
 
-                // Collapse first tile
-                self.collapse_tile(&mut tiles, 0);
+                match placement_strategy {
+                    PlacementStrategy::Random => self.random_placement_strategy(
+                        &mut tiles,
+                        &mut uncollapsed_tiles,
+                        &mut iterations,
+                    ),
+                    PlacementStrategy::Growing => self.growing_placement_strategy(
+                        &mut tiles,
+                        &mut uncollapsed_tiles,
+                        &mut iterations,
+                    ),
+                    PlacementStrategy::Ordered => self.ordered_placement_strategy(
+                        &mut tiles,
+                        &mut uncollapsed_tiles,
+                        &mut iterations,
+                    ),
+                    PlacementStrategy::LeastEntropy => self.least_entropy_placement_strategy(
+                        &mut tiles,
+                        &mut uncollapsed_tiles,
+                        &mut iterations,
+                    ),
+                }
 
                 Ok(())
             }
@@ -41,26 +78,44 @@ impl<'a> WFC<'a> {
         }
     }
 
-    fn collapse_tile(&mut self, tiles: &mut [Tile], tile_index: usize) {
-        tiles[tile_index].collapse(self.scene);
+    fn collapse_tile(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut HashSet<usize>,
+        tile_index: usize,
+    ) {
+        if tiles[tile_index].collapse(self.scene) {
+            uncollapsed_tiles.remove(&tile_index);
 
-        // Update neighbours
-        for direction in Direction::iterator() {
-            let neighbour_position = Vector2::<i32>::new(
-                tiles[tile_index].tile_position.x as i32,
-                tiles[tile_index].tile_position.y as i32,
-            ) + direction.get_vector();
-            if self.within_grid(neighbour_position) {
-                let neighbour_index = self.index2dto1d(Vector2::<usize>::new(
-                    neighbour_position.x as usize,
-                    neighbour_position.y as usize,
-                ));
-                if let Some(tile_data) = tiles[tile_index].data {
-                    tiles[neighbour_index]
-                        .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
+            // Update neighbours
+            for direction in Direction::iterator() {
+                let neighbour_position = Vector2::<i32>::new(
+                    tiles[tile_index].tile_position.x as i32,
+                    tiles[tile_index].tile_position.y as i32,
+                ) + direction.get_vector();
+                if self.within_grid(neighbour_position) {
+                    let neighbour_index = self.index2dto1d(Vector2::<usize>::new(
+                        neighbour_position.x as usize,
+                        neighbour_position.y as usize,
+                    ));
+                    if let Some(tile_data) = tiles[tile_index].data {
+                        if tiles[neighbour_index]
+                            .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
+                        {
+                            // TODO: backtrack?
+                            uncollapsed_tiles.remove(&neighbour_index);
+                        }
+                    }
                 }
             }
         }
+    }
+
+    fn collapse_center_tile(&mut self, tiles: &mut [Tile], uncollapsed_tiles: &mut HashSet<usize>) {
+        let center_tile_index =
+            self.index2dto1d(Vector2::<usize>::new(self.map_size / 2, self.map_size / 2));
+        self.collapse_tile(tiles, uncollapsed_tiles, center_tile_index);
+        uncollapsed_tiles.remove(&center_tile_index);
     }
 
     fn load_tiles(&self) -> anyhow::Result<Vec<TileData>> {
@@ -169,7 +224,112 @@ impl<'a> WFC<'a> {
             && index.x < self.map_size as i32
             && index.y < self.map_size as i32
     }
-}
 
-// Determines the order of tile collapsing
-struct PlacementStrategy {}
+    /** PLACEMENT STRATEGIES **/
+    // Chooses random tile to collapse
+    fn random_placement_strategy(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut HashSet<usize>,
+        iterations: &mut u32,
+    ) {
+        self.collapse_center_tile(tiles, uncollapsed_tiles);
+
+        while *iterations < self.max_placement_iterations && !uncollapsed_tiles.is_empty() {
+            let choosen_tile = *uncollapsed_tiles.iter().next().expect("Set is not empty");
+            uncollapsed_tiles.remove(&choosen_tile);
+            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile);
+            *iterations += 1;
+        }
+    }
+
+    // Collapses tiles in the order of a BFS from the starting tile
+    fn growing_placement_strategy(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut HashSet<usize>,
+        iterations: &mut u32,
+    ) {
+        let mut tiles_queue = VecDeque::<usize>::new();
+        tiles_queue.push_back(
+            self.index2dto1d(Vector2::<usize>::new(self.map_size / 2, self.map_size / 2)),
+        );
+
+        while !tiles_queue.is_empty()
+            && *iterations < self.max_placement_iterations
+            && !uncollapsed_tiles.is_empty()
+        {
+            let choosen_tile = tiles_queue.pop_front().expect("Queue is not empty");
+            uncollapsed_tiles.remove(&choosen_tile);
+            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile);
+
+            // Add neighbours to queue
+            for direction in Direction::iterator() {
+                let neighbour_position = Vector2::<i32>::new(
+                    tiles[choosen_tile].tile_position.x as i32,
+                    tiles[choosen_tile].tile_position.y as i32,
+                ) + direction.get_vector();
+                if self.within_grid(neighbour_position) {
+                    let neighbour_index = self.index2dto1d(Vector2::<usize>::new(
+                        neighbour_position.x as usize,
+                        neighbour_position.y as usize,
+                    ));
+                    let neighbour_tile = &tiles[neighbour_index];
+
+                    // Check that tile hasn't collapsed
+                    if neighbour_tile.data.is_none() {
+                        tiles_queue.push_back(neighbour_index);
+                    }
+                }
+            }
+
+            *iterations += 1;
+        }
+    }
+
+    // Collapese tiles in an order of left to right, down to up
+    fn ordered_placement_strategy(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut HashSet<usize>,
+        iterations: &mut u32,
+    ) {
+        for tile_index in 0..(self.map_size * self.map_size) {
+            if *iterations > self.max_placement_iterations {
+                return;
+            }
+
+            uncollapsed_tiles.remove(&tile_index);
+            self.collapse_tile(tiles, uncollapsed_tiles, tile_index);
+            *iterations += 1;
+        }
+    }
+
+    // Collapses the tiles in the order of least entropy first
+    fn least_entropy_placement_strategy(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut HashSet<usize>,
+        iterations: &mut u32,
+    ) {
+        self.collapse_center_tile(tiles, uncollapsed_tiles);
+
+        while *iterations < self.max_placement_iterations && !uncollapsed_tiles.is_empty() {
+            // Find element with least entropy
+            let mut least_entropy = usize::MAX;
+            let mut least_entropy_index = 0;
+
+            for tile_index in uncollapsed_tiles.iter() {
+                let tile_entropy = tiles[*tile_index].possible_tiles.len();
+                if tile_entropy < least_entropy {
+                    least_entropy = tile_entropy;
+                    least_entropy_index = *tile_index;
+                }
+            }
+
+            uncollapsed_tiles.remove(&least_entropy_index);
+            self.collapse_tile(tiles, uncollapsed_tiles, least_entropy_index);
+            *iterations += 1;
+        }
+    }
+}

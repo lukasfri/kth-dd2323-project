@@ -21,8 +21,18 @@ impl<'a> Tile<'a> {
         }
     }
 
-    pub fn collapse(&mut self, scene: &mut Scene) {
+    pub fn collapse(&mut self, scene: &mut Scene) -> bool {
+        // Already collapsed
+        if self.data.is_some() {
+            return false;
+        }
+
         let weights: Vec<u32> = self.possible_tiles.iter().map(|t| t.weight).collect();
+        // Impossible to collapse
+        if weights.is_empty() {
+            return false;
+        }
+
         let mut rng = thread_rng();
         let choosen_tile = WeightedIndex::new(weights).unwrap().sample(&mut rng);
 
@@ -33,21 +43,25 @@ impl<'a> Tile<'a> {
             &self.data.unwrap().model,
             Vector3::<f32>::new(
                 self.tile_position.x as f32,
-                0.0,
                 self.tile_position.y as f32,
+                0.0,
             ),
         );
+
+        true
     }
 
     // Remove options after neighbouring tile has changed
     // Direction is the the direction of this tiles edge that should be checked
     // Edge is the new edge type of that edge
-    pub fn remove_options(&mut self, direction: Direction, edge: &str) {
+    // Returns: impossible to collapse
+    pub fn remove_options(&mut self, direction: Direction, edge: &str) -> bool {
         self.possible_tiles = self
             .possible_tiles
             .iter()
             .copied()
             .filter(|tile| tile.check_edge(direction, edge))
             .collect::<Vec<&'a TileData>>();
+        self.possible_tiles.is_empty()
     }
 }
