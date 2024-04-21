@@ -245,7 +245,6 @@ impl<'a> WFC<'a> {
                             if line.starts_with('#') {
                                 continue;
                             }
-                            print!("{}", line);
                             let parts = line
                                 .replace(' ', "")
                                 .split('=')
