@@ -1,3 +1,4 @@
-# Available options: tile_set, max_iterations
+# Available options: tile_set, max_iterations, seed
 tile_set=./assets/test
 max_iterations=500
+seed=100

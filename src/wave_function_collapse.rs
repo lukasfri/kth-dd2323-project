@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeSet, VecDeque},
     f32::consts::PI,
     fs::File,
     io::{BufRead, BufReader},
@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{bail, ensure};
 use nalgebra::{Rotation3, Vector2};
+use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 
 use crate::{model_loader::ModelLoader, scene::Scene, tile::Tile, tile_data::TileData, Direction};
 
@@ -31,7 +32,7 @@ impl<'a> WFC<'a> {
     pub fn place_tiles(&mut self, placement_strategy: &PlacementStrategy) -> anyhow::Result<()> {
         // TODO: continue until filled map
         match self.load_tiles() {
-            Ok((max_iterations, tile_datas)) => {
+            Ok((max_iterations, mut random, tile_datas)) => {
                 let possible_tiles: Vec<&TileData> = tile_datas.iter().collect();
 
                 // Fill tiles list with all possibilities
@@ -40,8 +41,8 @@ impl<'a> WFC<'a> {
                     tiles.push(Tile::new(possible_tiles.clone(), self.index1dto2d(i)));
                 }
                 // Set of indexes of tiles that haven't been collapsed
-                let mut uncollapsed_tiles: HashSet<usize> =
-                    (0..(self.map_size * self.map_size)).collect::<HashSet<usize>>();
+                let mut uncollapsed_tiles: BTreeSet<usize> =
+                    (0..(self.map_size * self.map_size)).collect::<BTreeSet<usize>>();
                 let mut iterations = 0;
 
                 match placement_strategy {
@@ -50,24 +51,28 @@ impl<'a> WFC<'a> {
                         &mut uncollapsed_tiles,
                         &mut iterations,
                         max_iterations,
+                        &mut random,
                     ),
                     PlacementStrategy::Growing => self.growing_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
                         max_iterations,
+                        &mut random,
                     ),
                     PlacementStrategy::Ordered => self.ordered_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
                         max_iterations,
+                        &mut random,
                     ),
                     PlacementStrategy::LeastEntropy => self.least_entropy_placement_strategy(
                         &mut tiles,
                         &mut uncollapsed_tiles,
                         &mut iterations,
                         max_iterations,
+                        &mut random,
                     ),
                 }
 
@@ -80,10 +85,11 @@ impl<'a> WFC<'a> {
     fn collapse_tile(
         &mut self,
         tiles: &mut [Tile],
-        uncollapsed_tiles: &mut HashSet<usize>,
+        uncollapsed_tiles: &mut BTreeSet<usize>,
         tile_index: usize,
+        random: &mut StdRng,
     ) {
-        if tiles[tile_index].collapse(self.scene) {
+        if tiles[tile_index].collapse(self.scene, random) {
             uncollapsed_tiles.remove(&tile_index);
 
             // Update neighbours
@@ -110,20 +116,32 @@ impl<'a> WFC<'a> {
         }
     }
 
-    fn collapse_center_tile(&mut self, tiles: &mut [Tile], uncollapsed_tiles: &mut HashSet<usize>) {
+    fn collapse_center_tile(
+        &mut self,
+        tiles: &mut [Tile],
+        uncollapsed_tiles: &mut BTreeSet<usize>,
+        random: &mut StdRng,
+    ) {
         let center_tile_index =
             self.index2dto1d(Vector2::<usize>::new(self.map_size / 2, self.map_size / 2));
-        self.collapse_tile(tiles, uncollapsed_tiles, center_tile_index);
+        self.collapse_tile(tiles, uncollapsed_tiles, center_tile_index, random);
         uncollapsed_tiles.remove(&center_tile_index);
     }
 
-    fn load_tiles(&self) -> anyhow::Result<(u32, Vec<TileData>)> {
+    fn load_tiles(&self) -> anyhow::Result<(u32, StdRng, Vec<TileData>)> {
         let mut max_iterations: u32 = 100;
         let mut tileset_path: String = "".to_owned();
+        let mut seed: u64 = 0;
 
-        match self.read_config_file(&mut max_iterations, &mut tileset_path) {
+        match self.read_config_file(&mut max_iterations, &mut tileset_path, &mut seed) {
             Ok(_) => match self.read_tileset_config_file(&mut tileset_path) {
-                Ok(tiles) => Ok((max_iterations, tiles)),
+                Ok(tiles) => {
+                    if seed == 0 {
+                        Ok((max_iterations, StdRng::from_entropy(), tiles))
+                    } else {
+                        Ok((max_iterations, StdRng::seed_from_u64(seed), tiles))
+                    }
+                }
                 Err(err) => Err(err),
             },
             Err(err) => Err(err),
@@ -231,6 +249,7 @@ impl<'a> WFC<'a> {
         &self,
         max_iterations: &mut u32,
         tileset_path: &mut String,
+        seed: &mut u64,
     ) -> anyhow::Result<()> {
         const CONFIG_FILE_PATH: &str = "./config.txt";
 
@@ -269,6 +288,15 @@ impl<'a> WFC<'a> {
                                             ))
                                         }
                                     }
+                                    Err(_) => bail!(format!(
+                                        "Error in {} on line {}. {} is not a valid number",
+                                        CONFIG_FILE_PATH,
+                                        index + 1,
+                                        parts[1]
+                                    )),
+                                },
+                                "seed" => match parts[1].parse::<u64>() {
+                                    Ok(input_seed) => *seed = input_seed,
                                     Err(_) => bail!(format!(
                                         "Error in {} on line {}. {} is not a valid number",
                                         CONFIG_FILE_PATH,
@@ -324,16 +352,20 @@ impl<'a> WFC<'a> {
     fn random_placement_strategy(
         &mut self,
         tiles: &mut [Tile],
-        uncollapsed_tiles: &mut HashSet<usize>,
+        uncollapsed_tiles: &mut BTreeSet<usize>,
         iterations: &mut u32,
         max_iterations: u32,
+        random: &mut StdRng,
     ) {
-        self.collapse_center_tile(tiles, uncollapsed_tiles);
+        self.collapse_center_tile(tiles, uncollapsed_tiles, random);
 
         while *iterations < max_iterations && !uncollapsed_tiles.is_empty() {
-            let choosen_tile = *uncollapsed_tiles.iter().next().expect("Set is not empty");
+            let choosen_tile = *uncollapsed_tiles
+                .iter()
+                .choose(random)
+                .expect("Set is not empty");
             uncollapsed_tiles.remove(&choosen_tile);
-            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile);
+            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile, random);
             *iterations += 1;
         }
     }
@@ -342,9 +374,10 @@ impl<'a> WFC<'a> {
     fn growing_placement_strategy(
         &mut self,
         tiles: &mut [Tile],
-        uncollapsed_tiles: &mut HashSet<usize>,
+        uncollapsed_tiles: &mut BTreeSet<usize>,
         iterations: &mut u32,
         max_iterations: u32,
+        random: &mut StdRng,
     ) {
         let mut tiles_queue = VecDeque::<usize>::new();
         tiles_queue.push_back(
@@ -357,7 +390,7 @@ impl<'a> WFC<'a> {
         {
             let choosen_tile = tiles_queue.pop_front().expect("Queue is not empty");
             uncollapsed_tiles.remove(&choosen_tile);
-            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile);
+            self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile, random);
 
             // Add neighbours to queue
             for direction in Direction::iterator() {
@@ -387,9 +420,10 @@ impl<'a> WFC<'a> {
     fn ordered_placement_strategy(
         &mut self,
         tiles: &mut [Tile],
-        uncollapsed_tiles: &mut HashSet<usize>,
+        uncollapsed_tiles: &mut BTreeSet<usize>,
         iterations: &mut u32,
         max_iterations: u32,
+        random: &mut StdRng,
     ) {
         for tile_index in 0..(self.map_size * self.map_size) {
             if *iterations > max_iterations {
@@ -397,7 +431,7 @@ impl<'a> WFC<'a> {
             }
 
             uncollapsed_tiles.remove(&tile_index);
-            self.collapse_tile(tiles, uncollapsed_tiles, tile_index);
+            self.collapse_tile(tiles, uncollapsed_tiles, tile_index, random);
             *iterations += 1;
         }
     }
@@ -406,11 +440,12 @@ impl<'a> WFC<'a> {
     fn least_entropy_placement_strategy(
         &mut self,
         tiles: &mut [Tile],
-        uncollapsed_tiles: &mut HashSet<usize>,
+        uncollapsed_tiles: &mut BTreeSet<usize>,
         iterations: &mut u32,
         max_iterations: u32,
+        random: &mut StdRng,
     ) {
-        self.collapse_center_tile(tiles, uncollapsed_tiles);
+        self.collapse_center_tile(tiles, uncollapsed_tiles, random);
 
         while *iterations < max_iterations && !uncollapsed_tiles.is_empty() {
             // Find element with least entropy
@@ -426,7 +461,7 @@ impl<'a> WFC<'a> {
             }
 
             uncollapsed_tiles.remove(&least_entropy_index);
-            self.collapse_tile(tiles, uncollapsed_tiles, least_entropy_index);
+            self.collapse_tile(tiles, uncollapsed_tiles, least_entropy_index, random);
             *iterations += 1;
         }
     }

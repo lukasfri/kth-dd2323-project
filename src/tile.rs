@@ -1,7 +1,7 @@
 use nalgebra::{Vector2, Vector3};
 use rand::{
     distributions::{Distribution, WeightedIndex},
-    thread_rng,
+    rngs::StdRng,
 };
 
 use crate::{scene::Scene, tile_data::TileData, Direction};
@@ -21,7 +21,7 @@ impl<'a> Tile<'a> {
         }
     }
 
-    pub fn collapse(&mut self, scene: &mut Scene) -> bool {
+    pub fn collapse(&mut self, scene: &mut Scene, random: &mut StdRng) -> bool {
         // Already collapsed
         if self.data.is_some() {
             return false;
@@ -33,8 +33,7 @@ impl<'a> Tile<'a> {
             return false;
         }
 
-        let mut rng = thread_rng();
-        let choosen_tile = WeightedIndex::new(weights).unwrap().sample(&mut rng);
+        let choosen_tile = WeightedIndex::new(weights).unwrap().sample(random);
 
         // Place tile
         self.data = Some(self.possible_tiles[choosen_tile]);

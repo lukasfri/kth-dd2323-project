@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
     const MAP_SIZE: usize = 10; // Width/height of map
     let mut wfc = WFC::new(&mut scene, MAP_SIZE);
 
-    match wfc.place_tiles(&PlacementStrategy::LeastEntropy) {
+    match wfc.place_tiles(&PlacementStrategy::Random) {
         Ok(()) => {
             println!("Wave function collapse took {}ms", timer.ticks());
             program_loop(sdl_context, scene, canvas, camera, timer)
