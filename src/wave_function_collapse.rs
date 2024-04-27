@@ -419,6 +419,12 @@ impl<'a> WFC<'a> {
         {
             let choosen_tile = tiles_queue.pop_front().expect("Queue is not empty");
             uncollapsed_tiles.remove(&choosen_tile);
+
+            // Tile has already collapsed
+            if tiles[choosen_tile].data.is_some() {
+                continue; // Don't count duplicates as an iteration
+            }
+
             self.collapse_tile(tiles, uncollapsed_tiles, choosen_tile, random);
 
             // Add neighbours to queue
@@ -436,6 +442,7 @@ impl<'a> WFC<'a> {
 
                     // Check that tile hasn't collapsed
                     if neighbour_tile.data.is_none() {
+                        // Note: tile could already be in queue
                         tiles_queue.push_back(neighbour_index);
                     }
                 }
