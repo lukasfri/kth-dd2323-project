@@ -3,7 +3,7 @@ use kth_dd2323_project::{
     controls::{ControlState, Keybinds},
     renderer::{Raytracer, Renderer},
     scene::Scene,
-    wave_function_collapse::{PlacementStrategy, WFC},
+    wave_function_collapse::WFC,
     Color,
 };
 use nalgebra::{Vector2, Vector3};
@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
     const MAP_SIZE: usize = 10; // Width/height of map
     let mut wfc = WFC::new(&mut scene, MAP_SIZE);
 
-    match wfc.place_tiles(&PlacementStrategy::Random) {
+    match wfc.place_tiles() {
         Ok(()) => {
             println!("Wave function collapse took {}ms", timer.ticks());
             program_loop(sdl_context, scene, canvas, camera, timer)

@@ -29,10 +29,10 @@ impl<'a> WFC<'a> {
     }
 
     // Where the actual Wave Function Collapse logic happens
-    pub fn place_tiles(&mut self, placement_strategy: &PlacementStrategy) -> anyhow::Result<()> {
+    pub fn place_tiles(&mut self) -> anyhow::Result<()> {
         // TODO: continue until filled map
         match self.load_tiles() {
-            Ok((max_iterations, mut random, tile_datas)) => {
+            Ok((placement_strategy, max_iterations, mut random, tile_datas)) => {
                 let possible_tiles: Vec<&TileData> = tile_datas.iter().collect();
 
                 // Fill tiles list with all possibilities
@@ -128,18 +128,34 @@ impl<'a> WFC<'a> {
         uncollapsed_tiles.remove(&center_tile_index);
     }
 
-    fn load_tiles(&self) -> anyhow::Result<(u32, StdRng, Vec<TileData>)> {
+    fn load_tiles(&self) -> anyhow::Result<(&PlacementStrategy, u32, StdRng, Vec<TileData>)> {
+        let mut placement_strategy: &PlacementStrategy = &PlacementStrategy::LeastEntropy;
         let mut max_iterations: u32 = 100;
         let mut tileset_path: String = "".to_owned();
         let mut seed: u64 = 0;
 
-        match self.read_config_file(&mut max_iterations, &mut tileset_path, &mut seed) {
+        match self.read_config_file(
+            &mut placement_strategy,
+            &mut max_iterations,
+            &mut tileset_path,
+            &mut seed,
+        ) {
             Ok(_) => match self.read_tileset_config_file(&mut tileset_path) {
                 Ok(tiles) => {
                     if seed == 0 {
-                        Ok((max_iterations, StdRng::from_entropy(), tiles))
+                        Ok((
+                            placement_strategy,
+                            max_iterations,
+                            StdRng::from_entropy(),
+                            tiles,
+                        ))
                     } else {
-                        Ok((max_iterations, StdRng::seed_from_u64(seed), tiles))
+                        Ok((
+                            placement_strategy,
+                            max_iterations,
+                            StdRng::seed_from_u64(seed),
+                            tiles,
+                        ))
                     }
                 }
                 Err(err) => Err(err),
@@ -247,6 +263,7 @@ impl<'a> WFC<'a> {
 
     fn read_config_file(
         &self,
+        placement_strategy: &mut &PlacementStrategy,
         max_iterations: &mut u32,
         tileset_path: &mut String,
         seed: &mut u64,
@@ -274,19 +291,31 @@ impl<'a> WFC<'a> {
 
                             // Read and validate options
                             match parts[0].as_str() {
+                                "placement_strategy" => {
+                                    match parts[1].as_str() {
+                                        "least_entropy" => *placement_strategy = &PlacementStrategy::LeastEntropy,
+                                        "random" => *placement_strategy = &PlacementStrategy::Random,
+                                        "ordered" => *placement_strategy = &PlacementStrategy::Ordered,
+                                        "growing" => *placement_strategy = &PlacementStrategy::Growing,
+                                        _ => bail!(
+                                            format!(
+                                                "On line {} the placement_strategy can only be least_entropy, random, ordered or growing",
+                                                index + 1
+                                            )
+                                        )
+                                    }
+                                }
                                 "tile_set" => *tileset_path = parts[1].clone(),
                                 "max_iterations" => match parts[1].parse::<u32>() {
                                     Ok(max) => {
-                                        if (100..=10000).contains(&max) {
-                                            *max_iterations = max
-                                        } else {
-                                            bail!(format!(
-                                                "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
-                                                CONFIG_FILE_PATH,
-                                                index + 1,
-                                                parts[1]
-                                            ))
-                                        }
+                                        ensure!((100..=10000).contains(&max), format!(
+                                            "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
+                                            CONFIG_FILE_PATH,
+                                            index + 1,
+                                            parts[1]
+                                        ));
+
+                                        *max_iterations = max;
                                     }
                                     Err(_) => bail!(format!(
                                         "Error in {} on line {}. {} is not a valid number",

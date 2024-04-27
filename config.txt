@@ -1,4 +1,5 @@
-# Available options: tile_set, max_iterations, seed
+# Available options: placement_strategy(least_entropy, random, ordered, growing), tile_set, max_iterations, seed
+placement_strategy=random
 tile_set=./assets/test
 max_iterations=500
 seed=100
