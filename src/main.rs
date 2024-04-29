@@ -28,8 +28,7 @@ fn main() -> anyhow::Result<()> {
 
     // let scene = Scene::load_cornell_box();
     let mut scene = Scene::new();
-    const MAP_SIZE: usize = 10; // Width/height of map
-    let mut wfc = WFC::new(&mut scene, MAP_SIZE);
+    let mut wfc = WFC::new(&mut scene);
 
     match wfc.place_tiles() {
         Ok(()) => {
