@@ -149,7 +149,7 @@ impl<'a> WFC<'a> {
     ) -> anyhow::Result<(&PlacementStrategy, usize, u32, StdRng, Vec<TileData>)> {
         let mut placement_strategy: &PlacementStrategy = &PlacementStrategy::LeastEntropy;
         let mut map_size: usize = 10;
-        let mut max_iterations: u32 = 100;
+        let mut max_iterations: u32 = 1000;
         let mut tileset_path: String = "".to_owned();
         let mut seed: u64 = 0;
 
@@ -219,7 +219,7 @@ impl<'a> WFC<'a> {
                             ensure!(
                                 weight.is_ok() && weight.clone().unwrap() > 0,
                                 format!(
-                                    "On line {} the weight value can only be a non-negative integer",
+                                    "On line {} the weight value can only be a positive integer",
                                     index + 1
                                 )
                             );
