@@ -14,7 +14,7 @@ use winit::window::{
     CursorGrabMode, CursorIcon, Fullscreen, ResizeDirection, Theme, Window, WindowId,
 };
 
-#[cfg(any(x11_platform, wayland_platform))]
+#[cfg(target_os = "linux")]
 use winit::platform::startup_notify::{
     self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
 };
@@ -23,9 +23,7 @@ use winit::platform::startup_notify::{
 const BORDER_SIZE: f64 = 20.;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    tracing_subscriber::fmt::SubscriberBuilder::default()
-        // .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt::SubscriberBuilder::default().init();
 
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let _event_loop_proxy = event_loop.create_proxy();
@@ -57,10 +55,7 @@ enum UserEvent {
 /// Application state and event handling.
 struct Application<'window> {
     window: Option<WindowState<'window>>,
-    /// Drawing context.
-    ///
-    /// With OpenGL it could be EGLDisplay.
-    // context: Context<DisplayHandle<'static>>,
+
     instance: &'window wgpu::Instance,
 }
 
@@ -76,7 +71,6 @@ impl<'window> Application<'window> {
     fn create_window(
         &mut self,
         event_loop: &ActiveEventLoop,
-        _tab_id: Option<String>,
     ) -> Result<WindowState<'window>, Box<dyn Error>> {
         // TODO read-out activation token.
 
@@ -85,16 +79,11 @@ impl<'window> Application<'window> {
             .with_title("Winit window")
             .with_transparent(true);
 
-        #[cfg(any(x11_platform, wayland_platform))]
+        #[cfg(target_os = "linux")]
         if let Some(token) = event_loop.read_token_from_env() {
             startup_notify::reset_activation_token_env();
             info!("Using token {:?} to activate a window", token);
             window_attributes = window_attributes.with_activation_token(token);
-        }
-
-        #[cfg(macos_platform)]
-        if let Some(tab_id) = _tab_id {
-            window_attributes = window_attributes.with_tabbing_identifier(&tab_id);
         }
 
         let window = event_loop.create_window(window_attributes)?;
@@ -114,14 +103,14 @@ impl<'window> Application<'window> {
                 self.window = None;
             }
             Action::CreateNewWindow => {
-                #[cfg(any(x11_platform, wayland_platform))]
+                #[cfg(target_os = "linux")]
                 if let Err(err) = window.window.request_activation_token() {
                     info!("Failed to get activation token: {err}");
                 } else {
                     return;
                 }
 
-                if let Err(err) = self.create_window(event_loop, None) {
+                if let Err(err) = self.create_window(event_loop) {
                     error!("Error creating new window: {err}");
                 }
             }
@@ -325,10 +314,10 @@ impl ApplicationHandler<UserEvent> for Application<'_> {
                 window.cursor_moved(position);
             }
             WindowEvent::ActivationTokenDone { token: _token, .. } => {
-                #[cfg(any(x11_platform, wayland_platform))]
+                #[cfg(target_os = "linux")]
                 {
                     startup_notify::set_activation_token_env(_token);
-                    if let Err(err) = self.create_window(event_loop, None) {
+                    if let Err(err) = self.create_window(event_loop) {
                         error!("Error creating new window: {err}");
                     }
                 }
@@ -397,7 +386,7 @@ impl ApplicationHandler<UserEvent> for Application<'_> {
 
         // Create initial window.
         self.window = Some(
-            self.create_window(event_loop, None)
+            self.create_window(event_loop)
                 .expect("failed to create initial window"),
         );
 
@@ -451,8 +440,6 @@ struct WindowState<'window> {
     /// The amount of pan of the window.
     panned: PhysicalPosition<f32>,
 
-    #[cfg(macos_platform)]
-    option_as_alt: OptionAsAlt,
     cursor_hidden: bool,
 }
 
@@ -553,8 +540,6 @@ impl<'window> WindowState<'window> {
 
         let size = window.inner_size();
         let mut state = Self {
-            #[cfg(macos_platform)]
-            option_as_alt: window.option_as_alt(),
             surface,
             surface_config: config,
             device,
@@ -660,18 +645,6 @@ impl<'window> WindowState<'window> {
         if let Err(err) = self.window.set_cursor_grab(self.cursor_grab) {
             error!("Error setting cursor grab: {err}");
         }
-    }
-
-    #[cfg(macos_platform)]
-    fn cycle_option_as_alt(&mut self) {
-        self.option_as_alt = match self.option_as_alt {
-            OptionAsAlt::None => OptionAsAlt::OnlyLeft,
-            OptionAsAlt::OnlyLeft => OptionAsAlt::OnlyRight,
-            OptionAsAlt::OnlyRight => OptionAsAlt::Both,
-            OptionAsAlt::Both => OptionAsAlt::None,
-        };
-        info!("Setting option as alt {:?}", self.option_as_alt);
-        self.window.set_option_as_alt(self.option_as_alt);
     }
 
     /// Swap the window dimensions with `request_inner_size`.
