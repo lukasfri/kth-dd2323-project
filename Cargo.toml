@@ -24,6 +24,7 @@ bytemuck = { version = "1.15.0", features = ["derive"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 pollster = "0.3.0"
+glam = { version = "0.27.0", features = ["bytemuck"] }
 
 [profile.dev]
 opt-level = 3
