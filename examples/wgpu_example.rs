@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::error::Error;
 use std::f32::consts;
 use std::fmt::Debug;
@@ -10,13 +9,11 @@ use bytemuck::{Pod, Zeroable};
 use tracing::{error, info};
 use wgpu::util::DeviceExt;
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState};
-use winit::window::{
-    CursorGrabMode, CursorIcon, Fullscreen, ResizeDirection, Theme, Window, WindowId,
-};
+use winit::window::{CursorIcon, ResizeDirection, Theme, Window, WindowId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -103,7 +100,7 @@ fn create_texels(size: usize) -> Vec<u8> {
         .collect()
 }
 
-struct Example {
+struct WgpuRenderProps {
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     index_count: usize,
@@ -113,7 +110,7 @@ struct Example {
     pipeline_wire: Option<wgpu::RenderPipeline>,
 }
 
-impl Example {
+impl WgpuRenderProps {
     fn generate_matrix(aspect_ratio: f32) -> glam::Mat4 {
         let projection = glam::Mat4::perspective_rh(consts::FRAC_PI_4, aspect_ratio, 1.0, 10.0);
         let view = glam::Mat4::look_at_rh(
@@ -339,7 +336,7 @@ impl Example {
         };
 
         // Done
-        Example {
+        WgpuRenderProps {
             vertex_buf,
             index_buf,
             index_count: index_data.len(),
@@ -393,7 +390,7 @@ impl Example {
 
 #[cfg(target_os = "linux")]
 use winit::platform::startup_notify::{
-    self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
+    self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify,
 };
 
 /// The amount of points to around the window for drag resize direction calculations.
@@ -471,7 +468,7 @@ impl<'window> Application<'window> {
         Ok(window_state)
     }
 
-    fn handle_action(&mut self, event_loop: &ActiveEventLoop, action: Action) {
+    fn handle_action(&mut self, _event_loop: &ActiveEventLoop, action: Action) {
         // let cursor_position = self.cursor_position;
         let window = self.window.as_mut().unwrap();
         info!("Executing action: {action:?}");
@@ -479,30 +476,11 @@ impl<'window> Application<'window> {
             Action::CloseWindow => {
                 self.window = None;
             }
-            Action::CreateNewWindow => {
-                #[cfg(target_os = "linux")]
-                if let Err(err) = window.window.request_activation_token() {
-                    info!("Failed to get activation token: {err}");
-                } else {
-                    return;
-                }
-
-                if let Err(err) = self.create_window(event_loop) {
-                    error!("Error creating new window: {err}");
-                }
-            }
-            Action::ToggleResizeIncrements => window.toggle_resize_increments(),
-            Action::ToggleCursorVisibility => window.toggle_cursor_visibility(),
-            Action::ToggleResizable => window.toggle_resizable(),
             Action::ToggleDecorations => window.toggle_decorations(),
-            Action::ToggleFullscreen => window.toggle_fullscreen(),
-            Action::ToggleMaximize => window.toggle_maximize(),
             Action::ToggleImeInput => window.toggle_ime(),
             Action::Minimize => window.minimize(),
-            Action::CycleCursorGrab => window.cycle_cursor_grab(),
             Action::DragWindow => window.drag_window(),
             Action::DragResizeWindow => window.drag_resize_window(),
-            Action::ShowWindowMenu => window.show_menu(),
             Action::PrintHelp => self.print_help(),
             Action::RequestResize => window.swap_dimensions(),
         }
@@ -575,21 +553,19 @@ impl<'window> Application<'window> {
         info!("Keyboard bindings:");
         for binding in KEY_BINDINGS {
             info!(
-                "{}{:<10} - {} ({})",
+                "{}{:<10} - {}",
                 modifiers_to_string(binding.mods),
                 binding.trigger,
                 binding.action,
-                binding.action.help(),
             );
         }
         info!("Mouse bindings:");
         for binding in MOUSE_BINDINGS {
             info!(
-                "{}{:<10} - {} ({})",
+                "{}{:?} - {}",
                 modifiers_to_string(binding.mods),
-                mouse_button_to_string(binding.trigger),
+                binding.trigger,
                 binding.action,
-                binding.action.help(),
             );
         }
     }
@@ -732,19 +708,7 @@ impl ApplicationHandler<UserEvent> for Application<'_> {
                 window.panned.y += delta.y;
                 info!("Panned ({delta:?})) (now: {:?}), {phase:?}", window.panned);
             }
-            WindowEvent::DoubleTapGesture { .. } => {
-                info!("Smart zoom");
-            }
-            WindowEvent::TouchpadPressure { .. }
-            | WindowEvent::HoveredFileCancelled
-            | WindowEvent::KeyboardInput { .. }
-            | WindowEvent::CursorEntered { .. }
-            | WindowEvent::AxisMotion { .. }
-            | WindowEvent::DroppedFile(_)
-            | WindowEvent::HoveredFile(_)
-            | WindowEvent::Destroyed
-            | WindowEvent::Touch(_)
-            | WindowEvent::Moved(_) => (),
+            _ => (),
         }
     }
 
@@ -784,20 +748,45 @@ impl ApplicationHandler<UserEvent> for Application<'_> {
     }
 }
 
+struct RenderSurface<'window> {
+    surface: wgpu::Surface<'window>,
+    surface_config: wgpu::SurfaceConfiguration,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+}
+
+impl RenderSurface<'_> {
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        self.surface_config.width = new_size.width;
+        self.surface_config.height = new_size.height;
+        self.surface.configure(&self.device, &self.surface_config);
+    }
+
+    fn draw(&mut self, props: &mut WgpuRenderProps) -> Result<(), Box<dyn Error>> {
+        let frame = self
+            .surface
+            .get_current_texture()
+            .expect("Failed to acquire next swap chain texture");
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        props.render(&view, &self.device, &self.queue);
+
+        frame.present();
+
+        Ok(())
+    }
+}
+
 /// State of the window.
 struct WindowState<'window> {
     /// IME input.
     ime: bool,
     /// Render surface.
-    ///
-    /// NOTE: This surface must be dropped before the `Window`.
-    // surface: Surface<DisplayHandle<'static>, Arc<Window>>,
-    surface: wgpu::Surface<'window>,
-    surface_config: wgpu::SurfaceConfiguration,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    // render_pipeline: wgpu::RenderPipeline,
-    example: Example,
+    render_surface: RenderSurface<'window>,
+
+    example: WgpuRenderProps,
 
     /// The actual winit Window.
     window: Arc<Window>,
@@ -809,16 +798,12 @@ struct WindowState<'window> {
     modifiers: ModifiersState,
     /// Occlusion state of the window.
     occluded: bool,
-    /// Current cursor grab mode.
-    cursor_grab: CursorGrabMode,
     /// The amount of zoom into window.
     zoom: f64,
     /// The amount of rotation of the window.
     rotated: f32,
     /// The amount of pan of the window.
     panned: PhysicalPosition<f32>,
-
-    cursor_hidden: bool,
 }
 
 impl<'window> WindowState<'window> {
@@ -859,42 +844,6 @@ impl<'window> WindowState<'window> {
             .await
             .expect("Failed to create device");
 
-        // Load the shaders from disk
-        // let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        //     label: None,
-        //     source: wgpu::ShaderSource::Wgsl(SHADER_SOURCE.into()),
-        // });
-
-        // let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        //     label: None,
-        //     bind_group_layouts: &[],
-        //     push_constant_ranges: &[],
-        // });
-
-        // let swapchain_capabilities = surface.get_capabilities(&adapter);
-        // let swapchain_format = swapchain_capabilities.formats[0];
-
-        // let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        //     label: None,
-        //     layout: Some(&pipeline_layout),
-        //     vertex: wgpu::VertexState {
-        //         module: &shader,
-        //         entry_point: "vs_main",
-        //         buffers: &[],
-        //         compilation_options: wgpu::PipelineCompilationOptions::default(),
-        //     },
-        //     fragment: Some(wgpu::FragmentState {
-        //         module: &shader,
-        //         entry_point: "fs_main",
-        //         targets: &[Some(swapchain_format.into())],
-        //         compilation_options: wgpu::PipelineCompilationOptions::default(),
-        //     }),
-        //     primitive: wgpu::PrimitiveState::default(),
-        //     depth_stencil: None,
-        //     multisample: wgpu::MultisampleState::default(),
-        //     multiview: None,
-        // });
-
         let mut size = window.inner_size();
         size.width = size.width.max(1);
         size.height = size.height.max(1);
@@ -917,24 +866,24 @@ impl<'window> WindowState<'window> {
         let ime = true;
         window.set_ime_allowed(ime);
 
-        let example = Example::init(&config, &adapter, &device, &queue);
+        let example = WgpuRenderProps::init(&config, &adapter, &device, &queue);
 
         let size = window.inner_size();
-        let mut state = Self {
+
+        let render_surface = RenderSurface {
             surface,
             surface_config: config,
             device,
             queue,
-            // render_pipeline,
-            example,
+        };
 
-            cursor_grab: CursorGrabMode::None,
-            // surface,
+        let mut state = Self {
+            render_surface,
+            example,
             window,
             theme,
             ime,
             cursor_position: Default::default(),
-            cursor_hidden: Default::default(),
             modifiers: Default::default(),
             occluded: Default::default(),
             rotated: Default::default(),
@@ -971,62 +920,10 @@ impl<'window> WindowState<'window> {
         self.cursor_position = None;
     }
 
-    /// Toggle maximized.
-    fn toggle_maximize(&self) {
-        let maximized = self.window.is_maximized();
-        self.window.set_maximized(!maximized);
-    }
-
     /// Toggle window decorations.
     fn toggle_decorations(&self) {
         let decorated = self.window.is_decorated();
         self.window.set_decorations(!decorated);
-    }
-
-    /// Toggle window resizable state.
-    fn toggle_resizable(&self) {
-        let resizable = self.window.is_resizable();
-        self.window.set_resizable(!resizable);
-    }
-
-    /// Toggle cursor visibility
-    fn toggle_cursor_visibility(&mut self) {
-        self.cursor_hidden = !self.cursor_hidden;
-        self.window.set_cursor_visible(!self.cursor_hidden);
-    }
-
-    /// Toggle resize increments on a window.
-    fn toggle_resize_increments(&mut self) {
-        let new_increments = match self.window.resize_increments() {
-            Some(_) => None,
-            None => Some(LogicalSize::new(25.0, 25.0)),
-        };
-        info!("Had increments: {}", new_increments.is_none());
-        self.window.set_resize_increments(new_increments);
-    }
-
-    /// Toggle fullscreen.
-    fn toggle_fullscreen(&self) {
-        let fullscreen = if self.window.fullscreen().is_some() {
-            None
-        } else {
-            Some(Fullscreen::Borderless(None))
-        };
-
-        self.window.set_fullscreen(fullscreen);
-    }
-
-    /// Cycle through the grab modes ignoring errors.
-    fn cycle_cursor_grab(&mut self) {
-        self.cursor_grab = match self.cursor_grab {
-            CursorGrabMode::None => CursorGrabMode::Confined,
-            CursorGrabMode::Confined => CursorGrabMode::Locked,
-            CursorGrabMode::Locked => CursorGrabMode::None,
-        };
-        info!("Changing cursor grab mode to {:?}", self.cursor_grab);
-        if let Err(err) = self.window.set_cursor_grab(self.cursor_grab) {
-            error!("Error setting cursor grab: {err}");
-        }
     }
 
     /// Swap the window dimensions with `request_inner_size`.
@@ -1060,15 +957,23 @@ impl<'window> WindowState<'window> {
             _ => return,
         };
 
-        let config = &mut self.surface_config;
-        config.width = width.into();
-        config.height = height.into();
-        self.surface.configure(&self.device, config);
+        // let config = &mut self.render_surface.surface_config;
+        // config.width = width.into();
+        // config.height = height.into();
+        // self.render_surface
+        //     .surface
+        //     .configure(&self.render_surface.device, config);
+        self.render_surface.resize(new_size);
 
-        let mx_total = Example::generate_matrix(config.width as f32 / config.height as f32);
+        let mx_total = WgpuRenderProps::generate_matrix(
+            Into::<u32>::into(width) as f32 / Into::<u32>::into(height) as f32,
+        );
         let mx_ref: &[f32; 16] = mx_total.as_ref();
-        self.queue
-            .write_buffer(&self.example.uniform_buf, 0, bytemuck::cast_slice(mx_ref));
+        self.render_surface.queue.write_buffer(
+            &self.example.uniform_buf,
+            0,
+            bytemuck::cast_slice(mx_ref),
+        );
 
         self.window.request_redraw();
     }
@@ -1077,13 +982,6 @@ impl<'window> WindowState<'window> {
     fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
         self.window.request_redraw();
-    }
-
-    /// Show window menu.
-    fn show_menu(&self) {
-        if let Some(position) = self.cursor_position {
-            self.window.show_window_menu(position);
-        }
     }
 
     /// Drag the window.
@@ -1160,39 +1058,8 @@ impl<'window> WindowState<'window> {
             return Ok(());
         }
 
-        let frame = self
-            .surface
-            .get_current_texture()
-            .expect("Failed to acquire next swap chain texture");
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        self.render_surface.draw(&mut self.example)?;
 
-        self.example.render(&view, &self.device, &self.queue);
-        // let mut encoder = self
-        //     .device
-        //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        // {
-        //     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        //         label: None,
-        //         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-        //             view: &view,
-        //             resolve_target: None,
-        //             ops: wgpu::Operations {
-        //                 load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-        //                 store: wgpu::StoreOp::Store,
-        //             },
-        //         })],
-        //         depth_stencil_attachment: None,
-        //         timestamp_writes: None,
-        //         occlusion_query_set: None,
-        //     });
-        //     rpass.set_pipeline(&self.render_pipeline);
-        //     rpass.draw(0..3, 0..1);
-        // }
-
-        // self.queue.submit(Some(encoder.finish()));
-        frame.present();
         Ok(())
     }
 }
@@ -1220,44 +1087,13 @@ impl<T: Eq> Binding<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
     CloseWindow,
-    ToggleCursorVisibility,
-    CreateNewWindow,
-    ToggleResizeIncrements,
     ToggleImeInput,
     ToggleDecorations,
-    ToggleResizable,
-    ToggleFullscreen,
-    ToggleMaximize,
     Minimize,
-    CycleCursorGrab,
     PrintHelp,
     DragWindow,
     DragResizeWindow,
-    ShowWindowMenu,
     RequestResize,
-}
-
-impl Action {
-    fn help(&self) -> &'static str {
-        match self {
-            Action::CloseWindow => "Close window",
-            Action::ToggleCursorVisibility => "Hide cursor",
-            Action::CreateNewWindow => "Create new window",
-            Action::ToggleImeInput => "Toggle IME input",
-            Action::ToggleDecorations => "Toggle decorations",
-            Action::ToggleResizable => "Toggle window resizable state",
-            Action::ToggleFullscreen => "Toggle fullscreen",
-            Action::ToggleMaximize => "Maximize",
-            Action::Minimize => "Minimize",
-            Action::ToggleResizeIncrements => "Use resize increments when resizing window",
-            Action::CycleCursorGrab => "Cycle through cursor grab mode",
-            Action::PrintHelp => "Print help",
-            Action::DragWindow => "Start window drag",
-            Action::DragResizeWindow => "Start window drag-resize",
-            Action::ShowWindowMenu => "Show window menu",
-            Action::RequestResize => "Request a resize",
-        }
-    }
 }
 
 impl fmt::Display for Action {
@@ -1284,34 +1120,14 @@ fn modifiers_to_string(mods: ModifiersState) -> String {
     mods_line
 }
 
-fn mouse_button_to_string(button: MouseButton) -> &'static str {
-    match button {
-        MouseButton::Left => "LMB",
-        MouseButton::Right => "RMB",
-        MouseButton::Middle => "MMB",
-        MouseButton::Back => "Back",
-        MouseButton::Forward => "Forward",
-        MouseButton::Other(_) => "",
-    }
-}
-
 const KEY_BINDINGS: &[Binding<&'static str>] = &[
     Binding::new("Q", ModifiersState::CONTROL, Action::CloseWindow),
     Binding::new("H", ModifiersState::CONTROL, Action::PrintHelp),
-    Binding::new("F", ModifiersState::CONTROL, Action::ToggleFullscreen),
     Binding::new("D", ModifiersState::CONTROL, Action::ToggleDecorations),
     Binding::new("I", ModifiersState::CONTROL, Action::ToggleImeInput),
-    Binding::new("L", ModifiersState::CONTROL, Action::CycleCursorGrab),
-    Binding::new("P", ModifiersState::CONTROL, Action::ToggleResizeIncrements),
-    Binding::new("R", ModifiersState::CONTROL, Action::ToggleResizable),
     Binding::new("R", ModifiersState::ALT, Action::RequestResize),
     // M.
-    Binding::new("M", ModifiersState::CONTROL, Action::ToggleMaximize),
     Binding::new("M", ModifiersState::ALT, Action::Minimize),
-    // N.
-    Binding::new("N", ModifiersState::CONTROL, Action::CreateNewWindow),
-    // C.
-    Binding::new("Z", ModifiersState::CONTROL, Action::ToggleCursorVisibility),
 ];
 
 const MOUSE_BINDINGS: &[Binding<MouseButton>] = &[
@@ -1324,10 +1140,5 @@ const MOUSE_BINDINGS: &[Binding<MouseButton>] = &[
         MouseButton::Left,
         ModifiersState::CONTROL,
         Action::DragWindow,
-    ),
-    Binding::new(
-        MouseButton::Right,
-        ModifiersState::CONTROL,
-        Action::ShowWindowMenu,
     ),
 ];
