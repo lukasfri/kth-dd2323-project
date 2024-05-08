@@ -293,110 +293,102 @@ impl<'a> WFC<'a> {
     ) -> anyhow::Result<()> {
         const CONFIG_FILE_PATH: &str = "./config.txt";
 
-        match File::open(CONFIG_FILE_PATH) {
-            Ok(file) => {
-                // Read values
-                let reader = BufReader::new(file);
-                for (index, line) in reader.lines().enumerate() {
-                    match line {
-                        Ok(line) => {
-                            // Ignore comments
-                            if line.starts_with('#') {
-                                continue;
-                            }
-                            let parts = line
-                                .replace(' ', "")
-                                .split('=')
-                                .map(|s| s.to_string())
-                                .collect::<Vec<String>>();
+        let file = File::open(CONFIG_FILE_PATH)
+            .map_err(|_| anyhow::format_err!("Could not find config file {}", CONFIG_FILE_PATH))?;
 
-                            ensure!(parts.len() == 2 && parts[0].as_str() != "" && parts[1].as_str() != "", format!("Error in {} on line {}. The config file accepts lines in the format of KEY=VALUE", CONFIG_FILE_PATH, index + 1));
+        // Read values
+        let reader = BufReader::new(file);
+        for (index, line) in reader.lines().enumerate() {
+            let line = line?;
 
-                            // Read and validate options
-                            match parts[0].as_str() {
-                                "placement_strategy" => {
-                                    match parts[1].as_str() {
-                                        "least_entropy" => *placement_strategy = &PlacementStrategy::LeastEntropy,
-                                        "random" => *placement_strategy = &PlacementStrategy::Random,
-                                        "ordered" => *placement_strategy = &PlacementStrategy::Ordered,
-                                        "growing" => *placement_strategy = &PlacementStrategy::Growing,
-                                        _ => bail!(
-                                            format!(
-                                                "On line {} the placement_strategy can only be least_entropy, random, ordered or growing",
-                                                index + 1
-                                            )
-                                        )
-                                    }
-                                }
-                                "tile_set" => *tileset_path = parts[1].clone(),
-                                "map_size" => match parts[1].parse::<usize>() {
-                                    Ok(max) => {
-                                        ensure!((1..=100).contains(&max), format!(
-                                            "Error in {} on line {}. {} is not a accepted number. It has to be between 1 and 100",
-                                            CONFIG_FILE_PATH,
-                                            index + 1,
-                                            parts[1]
-                                        ));
+            // Ignore comments
+            if line.starts_with('#') {
+                continue;
+            }
+            let parts = line
+                .replace(' ', "")
+                .split('=')
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
 
-                                        *map_size = max;
-                                    }
-                                    Err(_) => bail!(format!(
-                                        "Error in {} on line {}. {} is not a valid number",
-                                        CONFIG_FILE_PATH,
-                                        index + 1,
-                                        parts[1]
-                                    )),
-                                },
-                                "max_iterations" => match parts[1].parse::<u32>() {
-                                    Ok(max) => {
-                                        ensure!((100..=10000).contains(&max), format!(
-                                            "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
-                                            CONFIG_FILE_PATH,
-                                            index + 1,
-                                            parts[1]
-                                        ));
+            ensure!(parts.len() == 2 && parts[0].as_str() != "" && parts[1].as_str() != "", format!("Error in {} on line {}. The config file accepts lines in the format of KEY=VALUE", CONFIG_FILE_PATH, index + 1));
 
-                                        *max_iterations = max;
-                                    }
-                                    Err(_) => bail!(format!(
-                                        "Error in {} on line {}. {} is not a valid number",
-                                        CONFIG_FILE_PATH,
-                                        index + 1,
-                                        parts[1]
-                                    )),
-                                },
-                                "seed" => match parts[1].parse::<u64>() {
-                                    Ok(input_seed) => *seed = input_seed,
-                                    Err(_) => bail!(format!(
-                                        "Error in {} on line {}. {} is not a valid number",
-                                        CONFIG_FILE_PATH,
-                                        index + 1,
-                                        parts[1]
-                                    )),
-                                },
-                                _ => bail!(format!(
-                                    "Error in {} on line {}. {} is not a option",
-                                    CONFIG_FILE_PATH,
-                                    index + 1,
-                                    parts[0]
-                                )),
-                            }
-                        }
-                        Err(err) => return Err(anyhow::Error::from(err)),
+            // Read and validate options
+            match parts[0].as_str() {
+                "placement_strategy" => {
+                    match parts[1].as_str() {
+                        "least_entropy" => *placement_strategy = &PlacementStrategy::LeastEntropy,
+                        "random" => *placement_strategy = &PlacementStrategy::Random,
+                        "ordered" => *placement_strategy = &PlacementStrategy::Ordered,
+                        "growing" => *placement_strategy = &PlacementStrategy::Growing,
+                        _ => bail!(
+                            format!(
+                                "On line {} the placement_strategy can only be least_entropy, random, ordered or growing",
+                                index + 1
+                            )
+                        )
                     }
                 }
-
-                // Make sure obligatory options have been set
-                if tileset_path.as_str() == "" {
-                    bail!(format!(
-                        "Error in {}. Option tileset_path has not been set",
+                "tile_set" => tileset_path.clone_from(&parts[1]),
+                "map_size" => {
+                    let max = parts[1].parse::<usize>().map_err(|_| anyhow::format_err!(
+                        "Error in {} on line {}. {} is not a valid number",
                         CONFIG_FILE_PATH,
-                    ))
-                }
+                        index + 1,
+                        parts[1]
+                    ))?;
+
+                    ensure!((1..=100).contains(&max), format!(
+                        "Error in {} on line {}. {} is not a accepted number. It has to be between 1 and 100",
+                        CONFIG_FILE_PATH,
+                        index + 1,
+                        parts[1]
+                    ));
+
+                    *map_size = max;
+                },
+                "max_iterations" => match parts[1].parse::<u32>() {
+                    Ok(max) => {
+                        ensure!((100..=10000).contains(&max), format!(
+                            "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
+                            CONFIG_FILE_PATH,
+                            index + 1,
+                            parts[1]
+                        ));
+
+                        *max_iterations = max;
+                    }
+                    Err(_) => bail!(format!(
+                        "Error in {} on line {}. {} is not a valid number",
+                        CONFIG_FILE_PATH,
+                        index + 1,
+                        parts[1]
+                    )),
+                },
+                "seed" => match parts[1].parse::<u64>() {
+                    Ok(input_seed) => *seed = input_seed,
+                    Err(_) => bail!(format!(
+                        "Error in {} on line {}. {} is not a valid number",
+                        CONFIG_FILE_PATH,
+                        index + 1,
+                        parts[1]
+                    )),
+                },
+                _ => bail!(format!(
+                    "Error in {} on line {}. {} is not a option",
+                    CONFIG_FILE_PATH,
+                    index + 1,
+                    parts[0]
+                )),
             }
-            Err(_) => {
-                bail!(format!("Could not find config file {}", CONFIG_FILE_PATH))
-            }
+        }
+
+        // Make sure obligatory options have been set
+        if tileset_path.as_str() == "" {
+            bail!(format!(
+                "Error in {}. Option tileset_path has not been set",
+                CONFIG_FILE_PATH,
+            ))
         }
 
         Ok(())
