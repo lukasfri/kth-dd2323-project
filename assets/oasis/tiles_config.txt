@@ -4,4 +4,4 @@ palm.glb, 2, sand, sand, sand, sand, 4
 water4.glb, 1, water, water, water, water, 1
 water3.glb, 1, water, water, sandedge, sand, 4
 water2inner.glb, 1, sandedge, sandedge, sand, sand, 4
-water3outer.glb, 1, sandedge, sandedge, water, water
+water3outer.glb, 1, sandedge, sandedge, water, water, 4

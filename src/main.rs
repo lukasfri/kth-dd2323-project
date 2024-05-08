@@ -30,13 +30,9 @@ fn main() -> anyhow::Result<()> {
     let mut scene = Scene::new();
     let mut wfc = WFC::new(&mut scene);
 
-    match wfc.place_tiles() {
-        Ok(()) => {
-            println!("Wave function collapse took {}ms", timer.ticks());
-            program_loop(sdl_context, scene, canvas, camera, timer)
-        }
-        Err(err) => Err(err),
-    }
+    wfc.place_tiles()?;
+    println!("Wave function collapse took {}ms", timer.ticks());
+    program_loop(sdl_context, scene, canvas, camera, timer)
 }
 
 fn setup_canvas(sdl_context: &Sdl, screen_size: Vector2<u32>) -> Canvas<Window> {

@@ -1,5 +1,5 @@
 # Available options: placement_strategy(least_entropy, random, ordered, growing), map_size, tile_set, max_iterations, seed
 placement_strategy=least_entropy
-tile_set=./assets/green_city
+tile_set=./assets/oasis
 map_size=10
 max_iterations=500

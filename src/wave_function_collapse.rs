@@ -29,62 +29,60 @@ impl<'a> WFC<'a> {
 
     // Where the actual Wave Function Collapse logic happens
     pub fn place_tiles(&mut self) -> anyhow::Result<()> {
-        match self.load_tiles() {
-            Ok((placement_strategy, map_size, max_iterations, mut random, tile_datas)) => {
-                let possible_tiles: Vec<&TileData> = tile_datas.iter().collect();
+        let (placement_strategy, map_size, max_iterations, mut random, tile_datas) =
+            self.load_tiles()?;
 
-                // Fill tiles list with all possibilities
-                let mut tiles: Vec<Tile> = vec![];
-                for i in 0..(map_size * map_size) {
-                    tiles.push(Tile::new(
-                        possible_tiles.clone(),
-                        self.index1dto2d(i, map_size),
-                    ));
-                }
-                // Set of indexes of tiles that haven't been collapsed
-                let mut uncollapsed_tiles: BTreeSet<usize> =
-                    (0..(map_size * map_size)).collect::<BTreeSet<usize>>();
-                let mut iterations = 0;
+        let possible_tiles: Vec<&TileData> = tile_datas.iter().collect();
 
-                match placement_strategy {
-                    PlacementStrategy::Random => self.random_placement_strategy(
-                        &mut tiles,
-                        &mut uncollapsed_tiles,
-                        &mut iterations,
-                        map_size,
-                        max_iterations,
-                        &mut random,
-                    ),
-                    PlacementStrategy::Growing => self.growing_placement_strategy(
-                        &mut tiles,
-                        &mut uncollapsed_tiles,
-                        &mut iterations,
-                        map_size,
-                        max_iterations,
-                        &mut random,
-                    ),
-                    PlacementStrategy::Ordered => self.ordered_placement_strategy(
-                        &mut tiles,
-                        &mut uncollapsed_tiles,
-                        &mut iterations,
-                        map_size,
-                        max_iterations,
-                        &mut random,
-                    ),
-                    PlacementStrategy::LeastEntropy => self.least_entropy_placement_strategy(
-                        &mut tiles,
-                        &mut uncollapsed_tiles,
-                        &mut iterations,
-                        map_size,
-                        max_iterations,
-                        &mut random,
-                    ),
-                }
-
-                Ok(())
-            }
-            Err(err) => Err(err),
+        // Fill tiles list with all possibilities
+        let mut tiles: Vec<Tile> = vec![];
+        for i in 0..(map_size * map_size) {
+            tiles.push(Tile::new(
+                possible_tiles.clone(),
+                self.index1dto2d(i, map_size),
+            ));
         }
+        // Set of indexes of tiles that haven't been collapsed
+        let mut uncollapsed_tiles: BTreeSet<usize> =
+            (0..(map_size * map_size)).collect::<BTreeSet<usize>>();
+        let mut iterations = 0;
+
+        match placement_strategy {
+            PlacementStrategy::Random => self.random_placement_strategy(
+                &mut tiles,
+                &mut uncollapsed_tiles,
+                &mut iterations,
+                map_size,
+                max_iterations,
+                &mut random,
+            ),
+            PlacementStrategy::Growing => self.growing_placement_strategy(
+                &mut tiles,
+                &mut uncollapsed_tiles,
+                &mut iterations,
+                map_size,
+                max_iterations,
+                &mut random,
+            ),
+            PlacementStrategy::Ordered => self.ordered_placement_strategy(
+                &mut tiles,
+                &mut uncollapsed_tiles,
+                &mut iterations,
+                map_size,
+                max_iterations,
+                &mut random,
+            ),
+            PlacementStrategy::LeastEntropy => self.least_entropy_placement_strategy(
+                &mut tiles,
+                &mut uncollapsed_tiles,
+                &mut iterations,
+                map_size,
+                max_iterations,
+                &mut random,
+            ),
+        }
+
+        Ok(())
     }
 
     fn collapse_tile(
@@ -95,31 +93,31 @@ impl<'a> WFC<'a> {
         random: &mut StdRng,
         map_size: usize,
     ) {
-        if tiles[tile_index].collapse(self.scene, random) {
-            uncollapsed_tiles.remove(&tile_index);
+        if !tiles[tile_index].collapse(self.scene, random) {
+            return;
+        }
 
-            // Update neighbours
-            for direction in Direction::iterator() {
-                let neighbour_position = Vector2::<i32>::new(
-                    tiles[tile_index].tile_position.x as i32,
-                    tiles[tile_index].tile_position.y as i32,
-                ) + direction.get_vector();
-                if self.within_grid(neighbour_position, map_size) {
-                    let neighbour_index = self.index2dto1d(
-                        Vector2::<usize>::new(
-                            neighbour_position.x as usize,
-                            neighbour_position.y as usize,
-                        ),
-                        map_size,
-                    );
-                    if let Some(tile_data) = tiles[tile_index].data {
-                        if tiles[neighbour_index]
-                            .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
-                        {
-                            // TODO: backtrack?
-                            uncollapsed_tiles.remove(&neighbour_index);
-                        }
-                    }
+        uncollapsed_tiles.remove(&tile_index);
+
+        // Update neighbours
+        for direction in Direction::iterator() {
+            let neighbour_position = Vector2::<i32>::new(
+                tiles[tile_index].tile_position.x as i32,
+                tiles[tile_index].tile_position.y as i32,
+            ) + direction.get_vector();
+            if !self.within_grid(neighbour_position, map_size) {
+                continue;
+            }
+
+            let neighbour_index = self.index2dto1d(
+                Vector2::<usize>::new(neighbour_position.x as usize, neighbour_position.y as usize),
+                map_size,
+            );
+            if let Some(tile_data) = tiles[tile_index].data {
+                if tiles[neighbour_index]
+                    .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
+                {
+                    uncollapsed_tiles.remove(&neighbour_index);
                 }
             }
         }
@@ -153,130 +151,107 @@ impl<'a> WFC<'a> {
         let mut tileset_path: String = "".to_owned();
         let mut seed: u64 = 0;
 
-        match self.read_config_file(
+        self.read_config_file(
             &mut placement_strategy,
             &mut map_size,
             &mut max_iterations,
             &mut tileset_path,
             &mut seed,
-        ) {
-            Ok(_) => match self.read_tileset_config_file(&mut tileset_path) {
-                Ok(tiles) => {
-                    if seed == 0 {
-                        Ok((
-                            placement_strategy,
-                            map_size,
-                            max_iterations,
-                            StdRng::from_entropy(),
-                            tiles,
-                        ))
-                    } else {
-                        Ok((
-                            placement_strategy,
-                            map_size,
-                            max_iterations,
-                            StdRng::seed_from_u64(seed),
-                            tiles,
-                        ))
-                    }
-                }
-                Err(err) => Err(err),
+        )?;
+
+        let tiles = self.read_tileset_config_file(&mut tileset_path)?;
+
+        Ok((
+            placement_strategy,
+            map_size,
+            max_iterations,
+            if seed == 0 {
+                StdRng::from_entropy()
+            } else {
+                StdRng::seed_from_u64(seed)
             },
-            Err(err) => Err(err),
-        }
+            tiles,
+        ))
     }
 
     fn read_tileset_config_file(&self, tileset_path: &mut String) -> anyhow::Result<Vec<TileData>> {
         let mut tiles: Vec<TileData> = vec![];
         let model_loader = ModelLoader::new();
 
-        match File::open(format!("{}/tiles_config.txt", tileset_path)) {
-            Ok(file) => {
-                let reader = BufReader::new(file);
-                for (index, line) in reader.lines().enumerate() {
-                    match line {
-                        Ok(line) => {
-                            // Ignore comments
-                            if line.starts_with('#') {
-                                continue;
-                            }
+        let file = File::open(format!("{}/tiles_config.txt", tileset_path)).map_err(|_| {
+            anyhow::format_err!(
+                "Could not find config file {}/tiles_config.txt",
+                tileset_path
+            )
+        })?;
 
-                            // Validate inputs
-                            let values = line
-                                .replace(' ', "")
-                                .split(',')
-                                .map(|s| s.to_string())
-                                .collect::<Vec<String>>();
-                            ensure!(
-                                values.len() == 7,
-                                format!(
-                                    "Line {} \"{}\" does not contain all values required",
-                                    index + 1,
-                                    line
-                                )
-                            );
-                            let weight = values[1].parse::<u32>();
-                            ensure!(
-                                weight.is_ok() && weight.clone().unwrap() > 0,
-                                format!(
-                                    "On line {} the weight value can only be a positive integer",
-                                    index + 1
-                                )
-                            );
-                            let weight = weight.unwrap();
-                            ensure!(
-                                values[6] == "1" || values[6] == "2" || values[6] == "4",
-                                format!(
-                                    "On line {} the rotatable value can only be 1, 2 or 4",
-                                    index + 1
-                                )
-                            );
-
-                            // Load models
-                            let rotation_angles: Vec<Rotation3<f32>> = match values[6].as_str() {
-                                "4" => vec![
-                                    Rotation3::from_euler_angles(0.0, 0.0, 0.0),
-                                    Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
-                                    Rotation3::from_euler_angles(0.0, 0.0, PI),
-                                    Rotation3::from_euler_angles(0.0, 0.0, 3.0 / 2.0 * PI),
-                                ],
-                                "2" => vec![
-                                    Rotation3::from_euler_angles(0.0, 0.0, 0.0),
-                                    Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
-                                ],
-                                _ => vec![Rotation3::from_euler_angles(0.0, 0.0, 0.0)],
-                            };
-
-                            // Store each rotation as seperate model
-                            for (index, rotation) in rotation_angles.into_iter().enumerate() {
-                                match model_loader.load_gltf_model(
-                                    format!("{}/{}", tileset_path, &values[0]),
-                                    rotation,
-                                ) {
-                                    Ok(model) => {
-                                        let tile = TileData {
-                                            model,
-                                            weight,
-                                            up_edge: values[2 + (index % 4)].clone(),
-                                            right_edge: values[2 + ((index + 1) % 4)].clone(),
-                                            down_edge: values[2 + ((index + 2) % 4)].clone(),
-                                            left_edge: values[2 + ((index + 3) % 4)].clone(),
-                                        };
-                                        tiles.push(tile);
-                                    }
-                                    Err(err) => return Err(err),
-                                }
-                            }
-                        }
-                        Err(err) => return Err(anyhow::Error::from(err)),
-                    }
-                }
+        let reader = BufReader::new(file);
+        for (index, line) in reader.lines().enumerate() {
+            let line = line?;
+            // Ignore comments
+            if line.starts_with('#') {
+                continue;
             }
-            Err(_) => {
-                bail!(format!(
-                    "Could not find config file {}/tiles_config.txt",
-                    tileset_path
-                ))
+
+            // Validate inputs
+            let values = line
+                .replace(' ', "")
+                .split(',')
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
+            ensure!(
+                values.len() == 7,
+                format!(
+                    "Line {} \"{}\" does not contain all values required",
+                    index + 1,
+                    line
+                )
+            );
+            let weight = values[1].parse::<u32>();
+            ensure!(
+                weight.is_ok() && weight.clone().unwrap() > 0,
+                format!(
+                    "On line {} the weight value can only be a positive integer",
+                    index + 1
+                )
+            );
+            let weight = weight.unwrap();
+            ensure!(
+                values[6] == "1" || values[6] == "2" || values[6] == "4",
+                format!(
+                    "On line {} the rotatable value can only be 1, 2 or 4",
+                    index + 1
+                )
+            );
+
+            // Load models
+            let rotation_angles: Vec<Rotation3<f32>> = match values[6].as_str() {
+                "4" => vec![
+                    Rotation3::from_euler_angles(0.0, 0.0, 0.0),
+                    Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
+                    Rotation3::from_euler_angles(0.0, 0.0, PI),
+                    Rotation3::from_euler_angles(0.0, 0.0, 3.0 / 2.0 * PI),
+                ],
+                "2" => vec![
+                    Rotation3::from_euler_angles(0.0, 0.0, 0.0),
+                    Rotation3::from_euler_angles(0.0, 0.0, PI / 2.0),
+                ],
+                _ => vec![Rotation3::from_euler_angles(0.0, 0.0, 0.0)],
+            };
+
+            // Store each rotation as seperate model
+            for (index, rotation) in rotation_angles.into_iter().enumerate() {
+                let model = model_loader
+                    .load_gltf_model(format!("{}/{}", tileset_path, &values[0]), rotation)?;
+                let tile = TileData {
+                    model,
+                    weight,
+                    up_edge: values[2 + (index % 4)].clone(),
+                    right_edge: values[2 + ((index + 1) % 4)].clone(),
+                    down_edge: values[2 + ((index + 2) % 4)].clone(),
+                    left_edge: values[2 + ((index + 3) % 4)].clone(),
+                };
+                tiles.push(tile);
             }
         }
 
@@ -347,32 +322,31 @@ impl<'a> WFC<'a> {
 
                     *map_size = max;
                 },
-                "max_iterations" => match parts[1].parse::<u32>() {
-                    Ok(max) => {
-                        ensure!((100..=10000).contains(&max), format!(
-                            "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
-                            CONFIG_FILE_PATH,
-                            index + 1,
-                            parts[1]
-                        ));
+                "max_iterations" =>  {
+                    let max = parts[1].parse::<u32>().map_err(|_| anyhow::format_err!(
+                        "Error in {} on line {}. {} is not a valid number",
+                        CONFIG_FILE_PATH,
+                        index + 1,
+                        parts[1]
+                    ))?;
 
-                        *max_iterations = max;
-                    }
-                    Err(_) => bail!(format!(
-                        "Error in {} on line {}. {} is not a valid number",
+                    ensure!((100..=10000).contains(&max), format!(
+                        "Error in {} on line {}. {} is not a accepted number. It has to be between 100 and 10000",
                         CONFIG_FILE_PATH,
                         index + 1,
                         parts[1]
-                    )),
+                    ));
+
+                    *max_iterations = max;
                 },
-                "seed" => match parts[1].parse::<u64>() {
-                    Ok(input_seed) => *seed = input_seed,
-                    Err(_) => bail!(format!(
+                "seed" => {
+                    let input_seed = parts[1].parse::<u64>().map_err(|_| anyhow::format_err!(
                         "Error in {} on line {}. {} is not a valid number",
                         CONFIG_FILE_PATH,
                         index + 1,
                         parts[1]
-                    )),
+                    ))?;
+                    *seed = input_seed;
                 },
                 _ => bail!(format!(
                     "Error in {} on line {}. {} is not a option",
@@ -465,21 +439,23 @@ impl<'a> WFC<'a> {
                     tiles[choosen_tile].tile_position.x as i32,
                     tiles[choosen_tile].tile_position.y as i32,
                 ) + direction.get_vector();
-                if self.within_grid(neighbour_position, map_size) {
-                    let neighbour_index = self.index2dto1d(
-                        Vector2::<usize>::new(
-                            neighbour_position.x as usize,
-                            neighbour_position.y as usize,
-                        ),
-                        map_size,
-                    );
-                    let neighbour_tile: &Tile<'_> = &tiles[neighbour_index];
+                if !self.within_grid(neighbour_position, map_size) {
+                    continue;
+                }
 
-                    // Check that tile hasn't collapsed
-                    if neighbour_tile.data.is_none() {
-                        // Note: tile could already be in queue
-                        tiles_queue.push_back(neighbour_index);
-                    }
+                let neighbour_index = self.index2dto1d(
+                    Vector2::<usize>::new(
+                        neighbour_position.x as usize,
+                        neighbour_position.y as usize,
+                    ),
+                    map_size,
+                );
+                let neighbour_tile: &Tile<'_> = &tiles[neighbour_index];
+
+                // Check that tile hasn't collapsed
+                if neighbour_tile.data.is_none() {
+                    // Note: tile could already be in queue
+                    tiles_queue.push_back(neighbour_index);
                 }
             }
 
