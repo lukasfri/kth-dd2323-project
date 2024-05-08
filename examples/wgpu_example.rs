@@ -8,12 +8,69 @@ use std::{fmt, mem};
 use bytemuck::{Pod, Zeroable};
 use tracing::{error, info};
 use wgpu::util::DeviceExt;
+use wgpu::DepthStencilState;
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState};
 use winit::window::{CursorIcon, ResizeDirection, Theme, Window, WindowId};
+
+pub struct Texture {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
+}
+
+impl Texture {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
+
+    pub fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        label: &str,
+    ) -> Self {
+        let size = wgpu::Extent3d {
+            // 2.
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let texture = device.create_texture(&desc);
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            // 4.
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -26,48 +83,127 @@ enum ShaderBinding {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
     _pos: [f32; 4],
-    _tex_coord: [f32; 2],
+    // _tex_coord: [f32; 2],
+    _color: Color,
 }
 
-fn vertex(pos: [i8; 3], tc: [i8; 2]) -> Vertex {
-    Vertex {
-        _pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
-        _tex_coord: [tc[0] as f32, tc[1] as f32],
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct Color {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+}
+
+impl Color {
+    pub const fn from_rgba(data: [f32; 4]) -> Self {
+        Self {
+            r: data[0],
+            g: data[1],
+            b: data[2],
+            a: data[3],
+        }
     }
 }
 
+impl From<[f32; 4]> for Color {
+    fn from(data: [f32; 4]) -> Self {
+        Self::from_rgba(data)
+    }
+}
+
+impl Vertex {
+    fn new(
+        pos: [i8; 3],
+        // tc: [i8; 2],
+        color: Color,
+        // asd
+    ) -> Self {
+        Self {
+            _pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32, 1.0],
+            // _tex_coord: [tc[0] as f32, tc[1] as f32],
+            _color: color,
+        }
+    }
+}
+
+fn vertex(pos: [i8; 3], color: Color) -> Vertex {
+    Vertex::new(pos, color)
+}
+
 fn create_vertices() -> (Vec<Vertex>, Vec<u16>) {
+    // let vertex_data = [
+    //     // top (0, 0, 1)
+    //     vertex([-1, -1, 1], [0, 0]),
+    //     vertex([1, -1, 1], [1, 0]),
+    //     vertex([1, 1, 1], [1, 1]),
+    //     vertex([-1, 1, 1], [0, 1]),
+    //     // bottom (0, 0, -1)
+    //     vertex([-1, 1, -1], [1, 0]),
+    //     vertex([1, 1, -1], [0, 0]),
+    //     vertex([1, -1, -1], [0, 1]),
+    //     vertex([-1, -1, -1], [1, 1]),
+    //     // right (1, 0, 0)
+    //     vertex([1, -1, -1], [0, 0]),
+    //     vertex([1, 1, -1], [1, 0]),
+    //     vertex([1, 1, 1], [1, 1]),
+    //     vertex([1, -1, 1], [0, 1]),
+    //     // left (-1, 0, 0)
+    //     vertex([-1, -1, 1], [1, 0]),
+    //     vertex([-1, 1, 1], [0, 0]),
+    //     vertex([-1, 1, -1], [0, 1]),
+    //     vertex([-1, -1, -1], [1, 1]),
+    //     // front (0, 1, 0)
+    //     vertex([1, 1, -1], [1, 0]),
+    //     vertex([-1, 1, -1], [0, 0]),
+    //     vertex([-1, 1, 1], [0, 1]),
+    //     vertex([1, 1, 1], [1, 1]),
+    //     // back (0, -1, 0)
+    //     vertex([1, -1, 1], [0, 0]),
+    //     vertex([-1, -1, 1], [1, 0]),
+    //     vertex([-1, -1, -1], [1, 1]),
+    //     vertex([1, -1, -1], [0, 1]),
+    // ];
+    pub const RED: Color = Color::from_rgba([1.0, 0.0, 0.0, 1.0]);
+    pub const PRIMARY: Color = RED;
+    // pub const GREEN: Color = Color::from_rgba([0.0, 1.0, 0.0, 1.0]);
+    // pub const BLACK: Color = Color::from_rgba([0.0, 0.0, 1.0, 1.0]);
+    pub const BLUE: Color = Color::from_rgba([0.0, 0.0, 1.0, 0.0]);
+    pub const THIRD: Color = BLUE;
+    // pub const YELLOW: Color = Color::from_rgba([1.0, 1.0, 1.0, 1.0]);
+    pub const SECOND: Color = THIRD;
     let vertex_data = [
         // top (0, 0, 1)
-        vertex([-1, -1, 1], [0, 0]),
-        vertex([1, -1, 1], [1, 0]),
-        vertex([1, 1, 1], [1, 1]),
-        vertex([-1, 1, 1], [0, 1]),
+        vertex([-1, -1, 1], THIRD),
+        vertex([1, -1, 1], PRIMARY),
+        vertex([1, 1, 1], SECOND),
+        vertex([-1, 1, 1], PRIMARY),
         // bottom (0, 0, -1)
-        vertex([-1, 1, -1], [1, 0]),
-        vertex([1, 1, -1], [0, 0]),
-        vertex([1, -1, -1], [0, 1]),
-        vertex([-1, -1, -1], [1, 1]),
+        vertex([-1, 1, -1], PRIMARY),
+        vertex([1, 1, -1], PRIMARY),
+        vertex([1, -1, -1], PRIMARY),
+        vertex([-1, -1, -1], PRIMARY),
         // right (1, 0, 0)
-        vertex([1, -1, -1], [0, 0]),
-        vertex([1, 1, -1], [1, 0]),
-        vertex([1, 1, 1], [1, 1]),
-        vertex([1, -1, 1], [0, 1]),
+        vertex([1, -1, -1], PRIMARY),
+        vertex([1, 1, -1], PRIMARY),
+        vertex([1, 1, 1], SECOND),
+        vertex([1, -1, 1], PRIMARY),
         // left (-1, 0, 0)
-        vertex([-1, -1, 1], [1, 0]),
-        vertex([-1, 1, 1], [0, 0]),
-        vertex([-1, 1, -1], [0, 1]),
-        vertex([-1, -1, -1], [1, 1]),
+        vertex([-1, -1, 1], THIRD),
+        vertex([-1, 1, 1], PRIMARY),
+        vertex([-1, 1, -1], PRIMARY),
+        vertex([-1, -1, -1], PRIMARY),
         // front (0, 1, 0)
-        vertex([1, 1, -1], [1, 0]),
-        vertex([-1, 1, -1], [0, 0]),
-        vertex([-1, 1, 1], [0, 1]),
-        vertex([1, 1, 1], [1, 1]),
+        vertex([1, 1, -1], PRIMARY),
+        vertex([-1, 1, -1], PRIMARY),
+        vertex([-1, 1, 1], PRIMARY),
+        vertex([1, 1, 1], SECOND),
         // back (0, -1, 0)
-        vertex([1, -1, 1], [0, 0]),
-        vertex([-1, -1, 1], [1, 0]),
-        vertex([-1, -1, -1], [1, 1]),
-        vertex([1, -1, -1], [0, 1]),
+        vertex([1, -1, 1], PRIMARY),
+        vertex([-1, -1, 1], THIRD),
+        vertex([-1, -1, -1], PRIMARY),
+        vertex([1, -1, -1], PRIMARY),
     ];
 
     let index_data: &[u16] = &[
@@ -108,6 +244,7 @@ struct WgpuRenderProps {
     uniform_buf: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
     pipeline_wire: Option<wgpu::RenderPipeline>,
+    depth_texture: Texture,
 }
 
 impl WgpuRenderProps {
@@ -127,6 +264,17 @@ impl WgpuRenderProps {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
+        println!(
+            "V: {:?}",
+            bytemuck::cast::<_, [f32; 8]>(Vertex::new(
+                [0, 0, 0],
+                Color::from_rgba([0.2, 0.4, 0.6, 1.0])
+            ))
+        );
+        println!(
+            "C: {:?}",
+            bytemuck::cast::<_, [f32; 4]>(Color::from_rgba([0.2, 0.4, 0.6, 1.0]))
+        );
         // Create the vertex and index buffers
         let vertex_size = mem::size_of::<Vertex>();
         let (mut vertex_data, mut index_data) = create_vertices();
@@ -138,7 +286,7 @@ impl WgpuRenderProps {
             .iter_mut()
             .for_each(|i| *i += vertex_data.len() as u16);
 
-        vertex_data_2.iter_mut().for_each(|v| v._pos[0] += 3.0);
+        vertex_data_2.iter_mut().for_each(|v| v._pos[1] += 3.0);
 
         vertex_data.extend(vertex_data_2);
         index_data.extend(index_data_2);
@@ -259,12 +407,14 @@ impl WgpuRenderProps {
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x4,
                     offset: 4 * 4,
                     shader_location: 1,
                 },
             ],
         }];
+
+        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
@@ -285,7 +435,13 @@ impl WgpuRenderProps {
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
@@ -344,6 +500,7 @@ impl WgpuRenderProps {
             uniform_buf,
             pipeline,
             pipeline_wire,
+            depth_texture,
         }
     }
 
@@ -366,7 +523,14 @@ impl WgpuRenderProps {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
@@ -399,7 +563,7 @@ const BORDER_SIZE: f64 = 20.;
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt::SubscriberBuilder::default().init();
 
-    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
+    let event_loop = EventLoop::<ExternalEvent>::with_user_event().build()?;
     let _event_loop_proxy = event_loop.create_proxy();
 
     // Wire the user event from another thread.
@@ -408,7 +572,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // from a different thread.
         info!("Starting to send user event every second");
         loop {
-            let _ = _event_loop_proxy.send_event(UserEvent::WakeUp);
+            let _ = _event_loop_proxy.send_event(ExternalEvent::WakeUp);
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     });
@@ -417,12 +581,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut state = pollster::block_on(Application::new(&instance));
 
-    event_loop.run_app(&mut state).map_err(Into::into)
+    event_loop.run_app(&mut state)?;
+
+    Ok(())
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
-enum UserEvent {
+enum ExternalEvent {
     WakeUp,
 }
 
@@ -571,8 +737,8 @@ impl<'window> Application<'window> {
     }
 }
 
-impl ApplicationHandler<UserEvent> for Application<'_> {
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+impl ApplicationHandler<ExternalEvent> for Application<'_> {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: ExternalEvent) {
         info!("User event: {event:?}");
     }
 
@@ -786,7 +952,7 @@ struct WindowState<'window> {
     /// Render surface.
     render_surface: RenderSurface<'window>,
 
-    example: WgpuRenderProps,
+    render_props: WgpuRenderProps,
 
     /// The actual winit Window.
     window: Arc<Window>,
@@ -866,7 +1032,7 @@ impl<'window> WindowState<'window> {
         let ime = true;
         window.set_ime_allowed(ime);
 
-        let example = WgpuRenderProps::init(&config, &adapter, &device, &queue);
+        let render_props = WgpuRenderProps::init(&config, &adapter, &device, &queue);
 
         let size = window.inner_size();
 
@@ -879,7 +1045,7 @@ impl<'window> WindowState<'window> {
 
         let mut state = Self {
             render_surface,
-            example,
+            render_props,
             window,
             theme,
             ime,
@@ -957,20 +1123,20 @@ impl<'window> WindowState<'window> {
             _ => return,
         };
 
-        // let config = &mut self.render_surface.surface_config;
-        // config.width = width.into();
-        // config.height = height.into();
-        // self.render_surface
-        //     .surface
-        //     .configure(&self.render_surface.device, config);
         self.render_surface.resize(new_size);
+
+        self.render_props.depth_texture = Texture::create_depth_texture(
+            &self.render_surface.device,
+            &self.render_surface.surface_config,
+            "depth_texture",
+        );
 
         let mx_total = WgpuRenderProps::generate_matrix(
             Into::<u32>::into(width) as f32 / Into::<u32>::into(height) as f32,
         );
         let mx_ref: &[f32; 16] = mx_total.as_ref();
         self.render_surface.queue.write_buffer(
-            &self.example.uniform_buf,
+            &self.render_props.uniform_buf,
             0,
             bytemuck::cast_slice(mx_ref),
         );
@@ -1058,7 +1224,7 @@ impl<'window> WindowState<'window> {
             return Ok(());
         }
 
-        self.render_surface.draw(&mut self.example)?;
+        self.render_surface.draw(&mut self.render_props)?;
 
         Ok(())
     }
