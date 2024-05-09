@@ -7,10 +7,11 @@ use crate::{camera::Camera, scene::Scene, Color, Intersectable, Intersection, Ra
 
 pub trait Renderer {
     type Error;
+    type Canvas<'a>;
 
     fn render(
         &mut self,
-        canvas: &mut Canvas<Window>,
+        canvas: &mut Self::Canvas<'_>,
         scene: &Scene,
         camera: &Camera,
     ) -> Result<(), Self::Error>;
@@ -20,6 +21,7 @@ pub struct Raytracer;
 
 impl Renderer for Raytracer {
     type Error = ();
+    type Canvas<'a> = Canvas<Window>;
 
     fn render(
         &mut self,

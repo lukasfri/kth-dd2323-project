@@ -1,3 +1,9 @@
+
+struct VertexInput {
+    @location(0) position: vec4<f32>,
+    @location(1) color: vec4<f32>,
+};
+
 struct VertexOutput {
     @location(0) color: vec4<f32>,
     @builtin(position) position: vec4<f32>,
@@ -9,12 +15,11 @@ var<uniform> transform: mat4x4<f32>;
 
 @vertex
 fn vs_main(
-    @location(0) position: vec4<f32>,
-    @location(1) color: vec4<f32>,
+    input: VertexInput,
 ) -> VertexOutput {
     var result: VertexOutput;
-    result.color = color;
-    result.position = transform * position;
+    result.color = input.color;
+    result.position = transform * input.position;
     return result;
 }
 

@@ -264,17 +264,6 @@ impl WgpuRenderProps {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
-        println!(
-            "V: {:?}",
-            bytemuck::cast::<_, [f32; 8]>(Vertex::new(
-                [0, 0, 0],
-                Color::from_rgba([0.2, 0.4, 0.6, 1.0])
-            ))
-        );
-        println!(
-            "C: {:?}",
-            bytemuck::cast::<_, [f32; 4]>(Color::from_rgba([0.2, 0.4, 0.6, 1.0]))
-        );
         // Create the vertex and index buffers
         let vertex_size = mem::size_of::<Vertex>();
         let (mut vertex_data, mut index_data) = create_vertices();

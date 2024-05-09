@@ -4,6 +4,7 @@ use nalgebra::{Matrix3, Rotation3, Vector2, Vector3};
 pub mod camera;
 pub mod controls;
 pub mod model_loader;
+pub mod raster;
 pub mod renderer;
 pub mod scene;
 pub mod tile;
