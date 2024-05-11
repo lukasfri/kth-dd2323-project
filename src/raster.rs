@@ -1,11 +1,10 @@
-use std::f32::consts::{self, PI};
+use std::f32::consts;
 use std::mem;
 
 use crate::{camera::Camera, renderer::Renderer, scene::Scene};
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Quat, Vec3, Vec4};
-use nalgebra::UnitQuaternion;
+use glam::Vec3;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
