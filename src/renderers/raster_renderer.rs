@@ -1,12 +1,14 @@
 use std::f32::consts;
 use std::mem;
 
-use crate::{camera::Camera, renderer::Renderer, scene::Scene};
+use crate::{camera::Camera, scene::Scene};
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
+
+use super::renderer::Renderer;
 
 pub struct Rasterizer {
     pub props: WgpuRenderProps,
@@ -165,8 +167,8 @@ struct Color {
     a: f32,
 }
 
-impl From<super::Color> for Color {
-    fn from(color: super::Color) -> Self {
+impl From<crate::Color> for Color {
+    fn from(color: crate::Color) -> Self {
         Self {
             r: color.0.x,
             g: color.0.y,
@@ -454,7 +456,7 @@ impl WgpuRenderProps {
             label: None,
         });
 
-        const SHADER_SOURCE: &str = include_str!("../examples/shader.wgsl");
+        const SHADER_SOURCE: &str = include_str!("../../examples/shader.wgsl");
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,

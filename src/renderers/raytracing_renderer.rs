@@ -5,17 +5,7 @@ use sdl2::{render::Canvas, video::Window};
 
 use crate::{camera::Camera, scene::Scene, Color, Intersectable, Intersection, Ray, Triangle};
 
-pub trait Renderer {
-    type Error;
-    type Canvas<'a>;
-
-    fn render(
-        &mut self,
-        canvas: &mut Self::Canvas<'_>,
-        scene: &Scene,
-        camera: &Camera,
-    ) -> Result<(), Self::Error>;
-}
+use super::renderer::Renderer;
 
 pub struct Raytracer;
 

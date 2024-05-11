@@ -1,7 +1,9 @@
 use kth_dd2323_project::controls::{Action, Controls};
 use kth_dd2323_project::model_loader::ModelLoader;
-use kth_dd2323_project::raster::{Rasterizer, RenderSurface, Texture, WgpuRenderProps};
-use kth_dd2323_project::renderer::Renderer;
+use kth_dd2323_project::renderers::raster_renderer::{
+    Rasterizer, RenderSurface, Texture, WgpuRenderProps,
+};
+use kth_dd2323_project::renderers::renderer::Renderer;
 use kth_dd2323_project::{
     camera::Camera, controls::ControlState, scene::Scene, wave_function_collapse::WFC,
 };
