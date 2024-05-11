@@ -2,7 +2,13 @@ use std::fmt::{self, Debug};
 
 use nalgebra::Vector2;
 use tracing::info;
-use winit::{event::MouseButton, keyboard::ModifiersState};
+use winit::{
+    event::MouseButton,
+    keyboard::{
+        Key::{self, Character, Named},
+        ModifiersState, NamedKey, SmolStr,
+    },
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -59,7 +65,7 @@ impl<T: PartialEq> Binding<T> {
 #[derive(Debug, Clone)]
 pub struct Controls {
     mouse_bindings: Vec<Binding<MouseButton>>,
-    key_bindings: Vec<Binding<&'static str>>,
+    key_bindings: Vec<Binding<Key<SmolStr>>>,
 }
 
 impl Default for Controls {
@@ -71,16 +77,56 @@ impl Default for Controls {
         )];
 
         let key_bindings = vec![
-            Binding::new("W", ModifiersState::empty(), Action::CameraMoveForward),
-            Binding::new("S", ModifiersState::empty(), Action::CameraMoveBackward),
-            Binding::new("A", ModifiersState::empty(), Action::CameraMoveLeft),
-            Binding::new("D", ModifiersState::empty(), Action::CameraMoveRight),
-            Binding::new("Q", ModifiersState::empty(), Action::CameraMoveDown),
-            Binding::new("E", ModifiersState::empty(), Action::CameraMoveUp),
-            Binding::new("LEFT", ModifiersState::empty(), Action::CameraRotateLeft),
-            Binding::new("RIGHT", ModifiersState::empty(), Action::CameraRotateRight),
-            Binding::new("UP", ModifiersState::empty(), Action::CameraRotateUp),
-            Binding::new("DOWN", ModifiersState::empty(), Action::CameraRotateDown),
+            Binding::new(
+                Character(SmolStr::new("w")),
+                ModifiersState::empty(),
+                Action::CameraMoveForward,
+            ),
+            Binding::new(
+                Character(SmolStr::new("s")),
+                ModifiersState::empty(),
+                Action::CameraMoveBackward,
+            ),
+            Binding::new(
+                Character(SmolStr::new("a")),
+                ModifiersState::empty(),
+                Action::CameraMoveLeft,
+            ),
+            Binding::new(
+                Character(SmolStr::new("d")),
+                ModifiersState::empty(),
+                Action::CameraMoveRight,
+            ),
+            Binding::new(
+                Character(SmolStr::new("q")),
+                ModifiersState::empty(),
+                Action::CameraMoveDown,
+            ),
+            Binding::new(
+                Character(SmolStr::new("e")),
+                ModifiersState::empty(),
+                Action::CameraMoveUp,
+            ),
+            Binding::new(
+                Named(NamedKey::ArrowLeft),
+                ModifiersState::empty(),
+                Action::CameraRotateLeft,
+            ),
+            Binding::new(
+                Named(NamedKey::ArrowRight),
+                ModifiersState::empty(),
+                Action::CameraRotateRight,
+            ),
+            Binding::new(
+                Named(NamedKey::ArrowUp),
+                ModifiersState::empty(),
+                Action::CameraRotateUp,
+            ),
+            Binding::new(
+                Named(NamedKey::ArrowDown),
+                ModifiersState::empty(),
+                Action::CameraRotateDown,
+            ),
         ];
 
         Self {
@@ -103,7 +149,7 @@ impl Controls {
         });
     }
 
-    pub fn add_key_binding(&mut self, key: &'static str, action: Action, mods: ModifiersState) {
+    pub fn add_key_binding(&mut self, key: Key<SmolStr>, action: Action, mods: ModifiersState) {
         self.key_bindings.push(Binding {
             trigger: key,
             action,
@@ -112,7 +158,7 @@ impl Controls {
     }
 
     /// Process the key binding.
-    pub fn parse_key_binding(&self, key: &str, mods: &ModifiersState) -> Option<Action> {
+    pub fn parse_key_binding(&self, key: Key<SmolStr>, mods: &ModifiersState) -> Option<Action> {
         self.key_bindings.iter().find_map(|binding| {
             binding
                 .is_triggered_by(&key, mods)
@@ -123,7 +169,7 @@ impl Controls {
     pub fn process_key_binding(
         &self,
         control_state: &mut ControlState,
-        key: &str,
+        key: Key<SmolStr>,
         mods: &ModifiersState,
         is_pressed: bool,
     ) -> Option<Action> {
@@ -163,7 +209,7 @@ impl Controls {
         info!("Keyboard bindings:");
         for binding in self.key_bindings.iter() {
             info!(
-                "{}{:<10} - {}",
+                "{}{:?} - {}",
                 modifiers_to_string(binding.mods),
                 binding.trigger,
                 binding.action,

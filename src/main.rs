@@ -19,7 +19,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, Ime, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{Key, ModifiersState};
+use winit::keyboard::ModifiersState;
 use winit::window::{CursorIcon, ResizeDirection, Theme, Window, WindowId};
 
 #[cfg(target_os = "linux")]
@@ -51,8 +51,8 @@ fn main() -> anyhow::Result<()> {
     let focal_length: u32 = 500 / 2;
     let camera = Camera::new(
         focal_length as f32,
-        Vector3::new(-3.5f32, 2.0, 2.0),
-        -Vector3::new(-3.5f32, 2.0, 2.0),
+        Vector3::new(5.0, -8.0, 8.0),
+        Vector3::new(0.0, 2.0, -1.0),
     );
     let scene = setup_scene()?;
 
@@ -136,8 +136,8 @@ fn move_camera(
     mouse_reference_position: &mut Option<Vector2<f32>>,
     camera: &mut Camera,
 ) {
-    const CAMERA_MOVEMENT_SPEED: f32 = 1.0;
-    const CAMERA_ROTATION_SPEED: f32 = 1.0;
+    const CAMERA_MOVEMENT_SPEED: f32 = 2.0;
+    const CAMERA_ROTATION_SPEED: f32 = 0.5;
     const CAMERA_MOUSE_ROTATION_SPEED: f32 = 0.1;
 
     let camera_speed = dt * CAMERA_MOVEMENT_SPEED;
@@ -164,15 +164,15 @@ fn move_camera(
 
     camera.move_relative(movement);
 
-    let camera_rotation_speed = (dt / 1000.0) * CAMERA_ROTATION_SPEED;
+    let camera_rotation_speed = dt * CAMERA_ROTATION_SPEED;
     let mut new_yaw = camera.yaw();
     let mut new_pitch = camera.pitch();
 
     if state.camera_rotate_left {
-        new_yaw -= camera_rotation_speed;
+        new_yaw += camera_rotation_speed;
     }
     if state.camera_rotate_right {
-        new_yaw += camera_rotation_speed;
+        new_yaw -= camera_rotation_speed;
     }
     if state.camera_rotate_up {
         new_pitch -= camera_rotation_speed;
@@ -409,17 +409,13 @@ impl ApplicationHandler<ExternalEvent> for Application<'_> {
                 ..
             } => {
                 let mods = window.modifiers;
+                let action = self.controls.process_key_binding(
+                    &mut self.control_state,
+                    event.logical_key,
+                    &mods,
+                    event.state.is_pressed(),
+                );
 
-                let action = if let Key::Character(ch) = event.logical_key.as_ref() {
-                    self.controls.process_key_binding(
-                        &mut self.control_state,
-                        &ch.to_uppercase(),
-                        &mods,
-                        event.state.is_pressed(),
-                    )
-                } else {
-                    None
-                };
                 // Dispatch actions only on press.
                 if event.state.is_pressed() {
                     if let Some(action) = action {
@@ -709,7 +705,7 @@ impl<'window> WindowState<'window> {
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
         info!("Resized to {new_size:?}");
 
-        let (width, height) = match (
+        let (_width, _height) = match (
             NonZeroU32::new(new_size.width),
             NonZeroU32::new(new_size.height),
         ) {

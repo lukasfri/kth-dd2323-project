@@ -1,5 +1,5 @@
 # Wave function collapse (WFC)
-This is a project that implements wave function collapse using Rust and SDL2. The renderer used is a rasterized renderer which offloads computation to the GPU. Using WFC this program stiches together 3D tiles to create a coherent 3D world. Some examples that it can generate (using green_city and oasis tilesets):
+This is a project that implements wave function collapse using Rust and Winit. The renderer used is a rasterized renderer which offloads computation to the GPU. Using WFC this program stiches together 3D tiles to create a coherent 3D world. Some examples that it can generate (using green_city and oasis tilesets):
 
 [ADD EXAMPLE IMAGES]
 
@@ -8,10 +8,10 @@ This project focuses on usability by letting the user easily change generation p
 Run the program by running the following command in the terminal:
 
 ```
-cargo run
+WAYLAND_DISPLAY="" cargo run
 ```
 
-You can move the camera using W/S/A/D/Shift/Space. You can rotate the camera by right clicking and dragging or using the Left/Right/Up/Down keys.
+You can move the camera using W/S/A/D/Q/E. You can rotate the camera by right clicking and dragging or using the Left/Right/Up/Down keys.
 
 ## Explanation WFC
 Wave function collapsed works by first assigning each tile position every possible tile, each tile position has a so called wave function with multiple possible outputs. This is the start state for the algorithm. It then chooses a tile position to collapse, it is assigned one of its possible tiles. This then affects its neighbouring tiles so their wave function is updated. This process continues until the entire map has been filled, the max iteration count has been reached or the map has reached an impossible state where no more tile positions can be collapsed. It chooses the order of tile position collapse depending on the placement strategy used. Our project implements the following strategies:
