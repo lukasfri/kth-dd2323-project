@@ -1,5 +1,4 @@
 use kth_dd2323_project::controls::{Action, Controls};
-use kth_dd2323_project::model_loader::ModelLoader;
 use kth_dd2323_project::renderers::raster_renderer::{
     Rasterizer, RenderSurface, Texture, WgpuRenderProps,
 };

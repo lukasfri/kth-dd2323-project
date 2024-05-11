@@ -2,7 +2,7 @@
 grass.glb, 4, grass, grass, grass, grass, 1
 forest.glb, 8, grass, grass, grass, grass, 4
 building0.glb, 1, grass, grass, grass, grass, 1
-building1.glb, 1, building, grass, grass, grass, 4
-building2.glb, 1, building, grass, building, grass, 2
-building3.glb, 1, building, building, building, grass, 4
+building1.glb, 1, grass, grass, grass, building, 4
+building2.glb, 1, grass, building, grass, building, 2
+building3.glb, 1, grass, building, building, building, 4
 building4.glb, 1, building, building, building, building, 1
