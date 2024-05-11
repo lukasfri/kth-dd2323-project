@@ -5,7 +5,7 @@ This is a project that implements wave function collapse using Rust and Winit. T
 
 This project focuses on usability by letting the user easily change generation parameters by modifying config files. This also allows the user to easily upload their own tileset for use in the program. See [documentation](#documentation-configtxt).
 
-Run the program by running the following command in the terminal:
+Run the program by running the following command in the terminal (on Linux):
 
 ```
 WAYLAND_DISPLAY="" cargo run

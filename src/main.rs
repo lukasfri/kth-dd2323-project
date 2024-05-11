@@ -64,61 +64,13 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn setup_scene() -> anyhow::Result<Scene> {
-    // let scene = Scene::load_cornell_box();
     let mut scene = Scene::new();
     let mut wfc = WFC::new(&mut scene);
 
     wfc.place_tiles()?;
 
-    scene.triangles.extend(ModelLoader::load_cornell_box());
-
     Ok(scene)
 }
-
-// fn program_loop(
-//     sdl_context: Sdl,
-//     scene: Scene,
-//     mut canvas: Canvas<Window>,
-//     mut camera: Camera,
-//     timer: TimerSubsystem,
-// ) -> anyhow::Result<()> {
-//     let mut mouse_reference_position: Option<Vector2<f32>> = None;
-//     let mut event_pump = sdl_context.event_pump().unwrap();
-//     let binds = Keybinds::default();
-//     let mut t = timer.ticks();
-
-//     'running: loop {
-//         for event in event_pump.poll_iter() {
-//             match event {
-//                 Event::Quit { .. }
-//                 | Event::KeyDown {
-//                     keycode: Some(Keycode::Escape),
-//                     ..
-//                 } => break 'running,
-//                 _ => {}
-//             }
-//         }
-
-//         let t2 = timer.ticks();
-//         let dt = t2 - t;
-//         println!("Render time: {}ms", dt);
-//         t = t2;
-
-//         let keyboard = KeyboardState::new(&event_pump);
-//         let mouse = MouseState::new(&event_pump);
-//         let state = binds.get_current_state(&keyboard, &mouse, canvas.window());
-//         update(
-//             dt as f32,
-//             &state,
-//             &mut mouse_reference_position,
-//             &mut camera,
-//         );
-
-//         Raytracer.render(&mut canvas, &scene, &camera).unwrap();
-//     }
-
-//     Ok(())
-// }
 
 fn update(
     dt: f32,
@@ -219,7 +171,6 @@ struct Application<'window> {
 impl<'window> Application<'window> {
     async fn new(instance: &'window wgpu::Instance, scene: Scene, camera: Camera) -> Self {
         Self {
-            // context,
             window: None,
             instance,
             control_state: ControlState::default(),
@@ -258,7 +209,6 @@ impl<'window> Application<'window> {
     }
 
     fn handle_action(&mut self, _event_loop: &ActiveEventLoop, action: Action) {
-        // let cursor_position = self.cursor_position;
         let window = self.window.as_mut().unwrap();
         debug!("Executing action: {action:?}");
         match action {
@@ -270,7 +220,7 @@ impl<'window> Application<'window> {
             Action::Minimize => window.minimize(),
             Action::DragWindow => window.drag_window(),
             Action::DragResizeWindow => window.drag_resize_window(),
-            Action::PrintHelp => (), // self.print_help(),
+            //Action::PrintHelp => self.print_help(),
             Action::RequestResize => window.swap_dimensions(),
             _ => (),
         }
@@ -713,12 +663,6 @@ impl<'window> WindowState<'window> {
             _ => return,
         };
 
-        // let config = &mut self.render_surface.surface_config;
-        // config.width = width.into();
-        // config.height = height.into();
-        // self.render_surface
-        //     .surface
-        //     .configure(&self.render_surface.device, config);
         self.render_surface.resize(new_size);
 
         self.rasterizer.props.depth_texture = Texture::create_depth_texture(
@@ -726,17 +670,6 @@ impl<'window> WindowState<'window> {
             &self.render_surface.surface_config,
             "depth_texture",
         );
-
-        // let mx_total = WgpuRenderProps::generate_matrix(
-        //     Into::<u32>::into(width) as f32 / Into::<u32>::into(height) as f32,
-
-        // );
-        // let mx_ref: &[f32; 16] = mx_total.as_ref();
-        // self.render_surface.queue.write_buffer(
-        //     &self.rasterizer.props.uniform_buf,
-        //     0,
-        //     bytemuck::cast_slice(mx_ref),
-        // );
 
         self.window.request_redraw();
     }
