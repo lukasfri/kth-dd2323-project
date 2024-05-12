@@ -56,7 +56,7 @@ This file should contain a row for each tile included in the tileset. Parameters
 |-----------|---------------|-----------|
 |model|A file path relative to the tileset folder|Defines the path to the .glb model file.|
 |weight|A positive 32-bit integer|Defines the priority for selecting this tile over others. Note that this is per tile variant, if there are 4 rotations of the tile each variant has this priority.|
-|up-edge|A string|Defines the upwards type of the tile. This is used to determine which tiles can be placed above this tile. If this tile has grass as up-edge for example then the tile above needs to have grass as down-edge. It is possible to optinally add a suffix by ending the string with :SUFFIX where SUFFIX is a chosen string. This suffix is then uses to prevent the tile matching with rotated versions of itself.|
+|up-edge|A string|Defines the upwards type of the tile. This is used to determine which tiles can be placed above this tile. If this tile has grass as up-edge for example then the tile above needs to have grass as down-edge. It is possible to optionally add a suffix by ending the string with :SUFFIX where SUFFIX is a chosen string. This suffix is then uses to prevent the tile matching with rotated versions of itself.|
 |right-edge|A string|Defines the right type of the tile. This is used to determine which tiles can be placed to the right of this tile.|
 |down-edge|A string|Defines the downwards type of the tile. This is used to determine which tiles can be placed below this tile.|
 |left-edge|A string|Defines the left type of the tile. This is used to determine which tiles can be placed to the left of this tile.|
