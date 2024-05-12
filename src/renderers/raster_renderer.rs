@@ -311,7 +311,7 @@ pub struct WgpuRenderProps {
 
 impl WgpuRenderProps {
     pub fn generate_matrix(aspect_ratio: f32, position: Vec3, direction: Vec3) -> glam::Mat4 {
-        let projection = glam::Mat4::perspective_infinite_rh(consts::FRAC_PI_4, aspect_ratio, 10.0);
+        let projection = glam::Mat4::perspective_infinite_rh(consts::FRAC_PI_4, aspect_ratio, 1.0);
 
         let direction = (direction).normalize();
 
