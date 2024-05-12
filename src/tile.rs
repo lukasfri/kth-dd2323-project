@@ -54,12 +54,17 @@ impl<'a> Tile<'a> {
     // Direction is the the direction of this tiles edge that should be checked
     // Edge is the new edge type of that edge
     // Returns: impossible to collapse
-    pub fn remove_options(&mut self, direction: Direction, edge: &str) -> bool {
+    pub fn remove_options(
+        &mut self,
+        direction: Direction,
+        edge: &str,
+        suffix: Option<&str>,
+    ) -> bool {
         self.possible_tiles = self
             .possible_tiles
             .iter()
             .copied()
-            .filter(|tile| tile.check_edge(direction, edge))
+            .filter(|tile| tile.check_edge(direction, edge, suffix))
             .collect::<Vec<&'a TileData>>();
         self.possible_tiles.is_empty()
     }

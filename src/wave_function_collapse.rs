@@ -114,9 +114,11 @@ impl<'a> WFC<'a> {
                 map_size,
             );
             if let Some(tile_data) = tiles[tile_index].data {
-                if tiles[neighbour_index]
-                    .remove_options(direction.get_opposite(), tile_data.get_edge(direction))
-                {
+                if tiles[neighbour_index].remove_options(
+                    direction.get_opposite(),
+                    tile_data.get_edge(direction),
+                    tile_data.get_suffix(direction),
+                ) {
                     uncollapsed_tiles.remove(&neighbour_index);
                 }
             }
@@ -243,13 +245,83 @@ impl<'a> WFC<'a> {
             for (index, rotation) in rotation_angles.into_iter().enumerate() {
                 let model = model_loader
                     .load_gltf_model(format!("{}/{}", tileset_path, &values[0]), rotation)?;
+                let up_string = values[2 + (index % 4)]
+                    .clone()
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+                let right_string = values[2 + ((index + 1) % 4)]
+                    .clone()
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+                let down_string = values[2 + ((index + 2) % 4)]
+                    .clone()
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+                let left_string = values[2 + ((index + 3) % 4)]
+                    .clone()
+                    .split(':')
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                ensure!(
+                    up_string.len() <= 2,
+                    format!(
+                        "On line {} the up value can not have multiple suffixes",
+                        index + 1
+                    )
+                );
+                ensure!(
+                    right_string.len() <= 2,
+                    format!(
+                        "On line {} the right value can not have multiple suffixes",
+                        index + 1
+                    )
+                );
+                ensure!(
+                    down_string.len() <= 2,
+                    format!(
+                        "On line {} the down value can not have multiple suffixes",
+                        index + 1
+                    )
+                );
+                ensure!(
+                    left_string.len() <= 2,
+                    format!(
+                        "On line {} the left value can not have multiple suffixes",
+                        index + 1
+                    )
+                );
+
                 let tile = TileData {
                     model,
                     weight,
-                    up_edge: values[2 + (index % 4)].clone(),
-                    right_edge: values[2 + ((index + 1) % 4)].clone(),
-                    down_edge: values[2 + ((index + 2) % 4)].clone(),
-                    left_edge: values[2 + ((index + 3) % 4)].clone(),
+                    up_edge: up_string[0].to_owned(),
+                    right_edge: right_string[0].to_owned(),
+                    down_edge: down_string[0].to_owned(),
+                    left_edge: left_string[0].to_owned(),
+                    up_edge_suffix: if up_string.len() > 1 {
+                        Some(up_string[1].to_owned())
+                    } else {
+                        None
+                    },
+                    right_edge_suffix: if right_string.len() > 1 {
+                        Some(right_string[1].to_owned())
+                    } else {
+                        None
+                    },
+                    down_edge_suffix: if down_string.len() > 1 {
+                        Some(down_string[1].to_owned())
+                    } else {
+                        None
+                    },
+                    left_edge_suffix: if left_string.len() > 1 {
+                        Some(left_string[1].to_owned())
+                    } else {
+                        None
+                    },
                 };
                 tiles.push(tile);
             }

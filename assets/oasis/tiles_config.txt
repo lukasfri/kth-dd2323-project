@@ -1,7 +1,7 @@
 # model, weight, up-edge, right-edge, down-edge, left-edge, rotations(1, 2, 4)
 sand.glb, 16, sand, sand, sand, sand, 1
 palm.glb, 2, sand, sand, sand, sand, 4
-#water4.glb, 1, water, water, water, water, 1
-water3.glb, 1, sandedge, water, sandedge, sand, 4
-#water2inner.glb, 1, sand, sandedge, sandedge, sand, 4
-#water3outer.glb, 1, sandedge, water, water, sandedge, 4
+water4.glb, 1, water, water, water, water, 1
+water3.glb, 1, sandedge:l, water, sandedge:r, sand, 4
+water2inner.glb, 1, sand, sandedge:l, sandedge:u, sand, 4
+water3outer.glb, 1, water, water, sandedge:d, sandedge:l, 4
