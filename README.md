@@ -1,7 +1,8 @@
 # Wave function collapse (WFC)
 This is a project that implements wave function collapse using Rust and Winit. The renderer used is a rasterized renderer which offloads computation to the GPU. Using WFC this program stiches together 3D tiles to create a coherent 3D world. Some examples that it can generate (using green_city and oasis tilesets):
 
-[ADD EXAMPLE IMAGES]
+![Green City Example](docs/green_city_example.png)
+![Oasis Example](docs/oasis_example.png)
 
 This project focuses on usability by letting the user easily change generation parameters by modifying config files. This also allows the user to easily upload their own tileset for use in the program. See [documentation](#documentation-configtxt).
 
@@ -53,9 +54,9 @@ This file should contain a row for each tile included in the tileset. Parameters
 
 |Parameter  |Possible values|Information|
 |-----------|---------------|-----------|
-|model|A file path relative to the tileset folder|Defines the path to the .glb model file|
+|model|A file path relative to the tileset folder|Defines the path to the .glb model file.|
 |weight|A positive 32-bit integer|Defines the priority for selecting this tile over others. Note that this is per tile variant, if there are 4 rotations of the tile each variant has this priority.|
-|up-edge|A string|Defines the upwards type of the tile. This is used to determine which tiles can be placed above this tile. If this tile has grass as up-edge for example then the tile above needs to have grass as down-edge.|
+|up-edge|A string|Defines the upwards type of the tile. This is used to determine which tiles can be placed above this tile. If this tile has grass as up-edge for example then the tile above needs to have grass as down-edge. It is possible to optinally add a suffix by ending the string with :SUFFIX where SUFFIX is a chosen string. This suffix is then uses to prevent the tile matching with rotated versions of itself.|
 |right-edge|A string|Defines the right type of the tile. This is used to determine which tiles can be placed to the right of this tile.|
 |down-edge|A string|Defines the downwards type of the tile. This is used to determine which tiles can be placed below this tile.|
 |left-edge|A string|Defines the left type of the tile. This is used to determine which tiles can be placed to the left of this tile.|
