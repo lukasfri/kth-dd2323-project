@@ -63,9 +63,11 @@ impl Renderer for Rasterizer {
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-        self.props.vertex_buf = vertex_buf;
-        self.props.index_buf = index_buf;
-        self.props.index_count = index_data.len();
+        self.props.mesh_props = Some(MeshProps {
+            vertex_buf,
+            index_buf,
+            index_count: index_data.len(),
+        });
 
         self.props.aspect_ratio =
             canvas.surface_config.width as f32 / canvas.surface_config.height as f32;
@@ -146,7 +148,6 @@ impl Texture {
 #[repr(u32)]
 enum ShaderBinding {
     PerspectiveTransform = 0,
-    Texture = 1,
 }
 
 #[repr(C)]
@@ -221,86 +222,14 @@ impl Vertex {
     }
 }
 
-fn vertex(pos: [i8; 3], color: Color) -> Vertex {
-    Vertex::new(pos.map(|a| a as f32), color)
-}
-
-fn create_vertices() -> (Vec<Vertex>, Vec<u16>) {
-    pub const RED: Color = Color::from_rgba([1.0, 0.0, 0.0, 1.0]);
-    pub const PRIMARY: Color = RED;
-    // pub const GREEN: Color = Color::from_rgba([0.0, 1.0, 0.0, 1.0]);
-    // pub const BLACK: Color = Color::from_rgba([0.0, 0.0, 1.0, 1.0]);
-    pub const BLUE: Color = Color::from_rgba([0.0, 0.0, 1.0, 0.0]);
-    pub const THIRD: Color = BLUE;
-    // pub const YELLOW: Color = Color::from_rgba([1.0, 1.0, 1.0, 1.0]);
-    pub const SECOND: Color = THIRD;
-    let vertex_data = [
-        // top (0, 0, 1)
-        vertex([-1, -1, 1], THIRD),
-        vertex([1, -1, 1], PRIMARY),
-        vertex([1, 1, 1], SECOND),
-        vertex([-1, 1, 1], PRIMARY),
-        // bottom (0, 0, -1)
-        vertex([-1, 1, -1], PRIMARY),
-        vertex([1, 1, -1], PRIMARY),
-        vertex([1, -1, -1], PRIMARY),
-        vertex([-1, -1, -1], PRIMARY),
-        // right (1, 0, 0)
-        vertex([1, -1, -1], PRIMARY),
-        vertex([1, 1, -1], PRIMARY),
-        vertex([1, 1, 1], SECOND),
-        vertex([1, -1, 1], PRIMARY),
-        // left (-1, 0, 0)
-        vertex([-1, -1, 1], THIRD),
-        vertex([-1, 1, 1], PRIMARY),
-        vertex([-1, 1, -1], PRIMARY),
-        vertex([-1, -1, -1], PRIMARY),
-        // front (0, 1, 0)
-        vertex([1, 1, -1], PRIMARY),
-        vertex([-1, 1, -1], PRIMARY),
-        vertex([-1, 1, 1], PRIMARY),
-        vertex([1, 1, 1], SECOND),
-        // back (0, -1, 0)
-        vertex([1, -1, 1], PRIMARY),
-        vertex([-1, -1, 1], THIRD),
-        vertex([-1, -1, -1], PRIMARY),
-        vertex([1, -1, -1], PRIMARY),
-    ];
-
-    let index_data: &[u16] = &[
-        0, 1, 2, 2, 3, 0, // top
-        4, 5, 6, 6, 7, 4, // bottom
-        8, 9, 10, 10, 11, 8, // right
-        12, 13, 14, 14, 15, 12, // left
-        16, 17, 18, 18, 19, 16, // front
-        20, 21, 22, 22, 23, 20, // back
-    ];
-
-    (vertex_data.to_vec(), index_data.to_vec())
-}
-
-fn create_texels(size: usize) -> Vec<u8> {
-    (0..size * size)
-        .map(|id| {
-            // get high five for recognizing this ;)
-            let cx = 3.0 * (id % size) as f32 / (size - 1) as f32 - 2.0;
-            let cy = 2.0 * (id / size) as f32 / (size - 1) as f32 - 1.0;
-            let (mut x, mut y, mut count) = (cx, cy, 0);
-            while count < 0xFF && x * x + y * y < 4.0 {
-                let old_x = x;
-                x = x * x - y * y + cx;
-                y = 2.0 * old_x * y + cy;
-                count += 1;
-            }
-            count
-        })
-        .collect()
-}
-
-pub struct WgpuRenderProps {
+pub struct MeshProps {
     pub vertex_buf: wgpu::Buffer,
     pub index_buf: wgpu::Buffer,
     pub index_count: usize,
+}
+
+pub struct WgpuRenderProps {
+    pub mesh_props: Option<MeshProps>,
     pub bind_group: wgpu::BindGroup,
     pub uniform_buf: wgpu::Buffer,
     pub pipeline: wgpu::RenderPipeline,
@@ -326,96 +255,26 @@ impl WgpuRenderProps {
         config: &wgpu::SurfaceConfiguration,
         _adapter: &wgpu::Adapter,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
     ) -> Self {
-        // Create the vertex and index buffers
-        let (mut vertex_data, mut index_data) = create_vertices();
-        let (mut vertex_data_2, mut index_data_2) = create_vertices();
-
-        // Shift positions of the second cube to the right
-        // Shift indexes of the second cube
-        index_data_2
-            .iter_mut()
-            .for_each(|i| *i += vertex_data.len() as u16);
-
-        vertex_data_2.iter_mut().for_each(|v| v._pos[1] += 3.0);
-
-        vertex_data.extend(vertex_data_2);
-        index_data.extend(index_data_2);
-
-        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&index_data),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
         // Create pipeline layout
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: ShaderBinding::PerspectiveTransform as u32,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(64),
-                    },
-                    count: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: ShaderBinding::PerspectiveTransform as u32,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: wgpu::BufferSize::new(64),
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: ShaderBinding::Texture as u32,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Uint,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                },
-            ],
+                count: None,
+            }],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-
-        // Create the texture
-        let size = 256u32;
-        let texels = create_texels(size as usize);
-        let texture_extent = wgpu::Extent3d {
-            width: size,
-            height: size,
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: texture_extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Uint,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        queue.write_texture(
-            texture.as_image_copy(),
-            &texels,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(size),
-                rows_per_image: None,
-            },
-            texture_extent,
-        );
 
         let aspect_ratio = config.width as f32 / config.height as f32;
 
@@ -435,16 +294,10 @@ impl WgpuRenderProps {
         // Create bind group
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: ShaderBinding::PerspectiveTransform as u32,
+                resource: uniform_buf.as_entire_binding(),
+            }],
             label: None,
         });
 
@@ -537,9 +390,7 @@ impl WgpuRenderProps {
         // Done
         WgpuRenderProps {
             aspect_ratio,
-            vertex_buf,
-            index_buf,
-            index_count: index_data.len(),
+            mesh_props: None,
             bind_group,
             uniform_buf,
             pipeline,
@@ -581,14 +432,22 @@ impl WgpuRenderProps {
             rpass.push_debug_group("Prepare data for draw.");
             rpass.set_pipeline(&self.pipeline);
             rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.set_vertex_buffer(0, self.vertex_buf.slice(..));
-            rpass.pop_debug_group();
-            rpass.insert_debug_marker("Draw!");
-            rpass.draw_indexed(0..self.index_count as u32, 0, 0..1);
-            if let Some(ref pipe) = self.pipeline_wire {
-                rpass.set_pipeline(pipe);
-                rpass.draw_indexed(0..self.index_count as u32, 0, 0..1);
+
+            if let Some(MeshProps {
+                vertex_buf,
+                index_buf,
+                index_count,
+            }) = self.mesh_props.as_ref()
+            {
+                rpass.set_index_buffer(index_buf.slice(..), wgpu::IndexFormat::Uint16);
+                rpass.set_vertex_buffer(0, vertex_buf.slice(..));
+                rpass.pop_debug_group();
+                rpass.insert_debug_marker("Draw!");
+                rpass.draw_indexed(0..(*index_count) as u32, 0, 0..1);
+                if let Some(ref pipe) = self.pipeline_wire {
+                    rpass.set_pipeline(pipe);
+                    rpass.draw_indexed(0..(*index_count) as u32, 0, 0..1);
+                }
             }
         }
 

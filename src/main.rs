@@ -569,7 +569,7 @@ impl<'window> WindowState<'window> {
         let ime = true;
         window.set_ime_allowed(ime);
 
-        let props = WgpuRenderProps::init(&config, &adapter, &device, &queue);
+        let props = WgpuRenderProps::init(&config, &adapter, &device);
 
         let rasterizer = Rasterizer::new(props);
 

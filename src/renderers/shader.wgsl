@@ -23,10 +23,6 @@ fn vs_main(
     return result;
 }
 
-@group(0)
-@binding(1)
-var r_color: texture_2d<u32>;
-
 @fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
     return vertex.color;
