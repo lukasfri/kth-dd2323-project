@@ -448,7 +448,7 @@ impl WgpuRenderProps {
             label: None,
         });
 
-        const SHADER_SOURCE: &str = include_str!("../../examples/shader.wgsl");
+        const SHADER_SOURCE: &str = include_str!("./shader.wgsl");
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
