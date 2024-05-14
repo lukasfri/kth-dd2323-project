@@ -1,5 +1,5 @@
 # Wave function collapse (WFC)
-This is a project that implements wave function collapse using Rust and Winit. The renderer used is a rasterized renderer which offloads computation to the GPU. Using WFC this program stiches together 3D tiles to create a coherent 3D world. Some examples that it can generate (using green_city and oasis tilesets):
+This is a project that implements wave function collapse using Rust, WGPU and Winit. The renderer used is a rasterized renderer which offloads computation to the GPU. Using WFC this program stiches together 3D tiles to create a coherent 3D world. Some examples that it can generate (using green_city and oasis tilesets):
 
 ![Green City Example](docs/green_city_example.png)
 ![Oasis Example](docs/oasis_example.png)
