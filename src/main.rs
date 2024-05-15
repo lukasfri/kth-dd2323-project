@@ -555,6 +555,7 @@ impl<'window> WindowState<'window> {
             .get_default_config(&adapter, size.width, size.height)
             .unwrap();
 
+        config.format = wgpu::TextureFormat::Bgra8UnormSrgb;
         config.view_formats = vec![wgpu::TextureFormat::Bgra8UnormSrgb];
 
         surface.configure(&device, &config);
