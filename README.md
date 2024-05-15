@@ -9,7 +9,7 @@ This project focuses on usability by letting the user easily change generation p
 Run the program by running the following command in the terminal (on Linux):
 
 ```
-WAYLAND_DISPLAY="" cargo run
+cargo run
 ```
 
 You can move the camera using W/S/A/D/Q/E. You can rotate the camera by right clicking and dragging or using the Left/Right/Up/Down keys.
