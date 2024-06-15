@@ -75,9 +75,17 @@ fn update(
     dt: f32,
     state: &ControlState,
     mouse_reference_position: &mut Option<Vector2<f32>>,
+    enter_clicked: &mut bool,
     camera: &mut Camera,
+    scene: &mut Scene,
 ) {
     move_camera(dt, state, mouse_reference_position, camera);
+
+    // Regenerate world
+    if state.enter && !*enter_clicked {
+        *scene = setup_scene().expect("Scene not null");
+    }
+    *enter_clicked = state.enter;
 }
 
 // Move and rotate camera
@@ -165,6 +173,7 @@ struct Application<'window> {
     last_update: std::time::Instant,
 
     mouse_reference_position: Option<Vector2<f32>>,
+    enter_clicked: bool,
 }
 
 impl<'window> Application<'window> {
@@ -178,6 +187,7 @@ impl<'window> Application<'window> {
             camera,
             mouse_reference_position: None,
             last_update: std::time::Instant::now(),
+            enter_clicked: false,
         }
     }
 
@@ -189,7 +199,7 @@ impl<'window> Application<'window> {
 
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes()
-            .with_title("Winit window")
+            .with_title("Wave function collapse")
             .with_transparent(true);
 
         #[cfg(target_os = "linux")]
@@ -281,7 +291,9 @@ impl ApplicationHandler<ExternalEvent> for Application<'_> {
             dt_secs,
             &self.control_state,
             &mut self.mouse_reference_position,
+            &mut self.enter_clicked,
             &mut self.camera,
+            &mut self.scene,
         );
 
         self.last_update = std::time::Instant::now();
@@ -326,7 +338,9 @@ impl ApplicationHandler<ExternalEvent> for Application<'_> {
                     0.0,
                     &self.control_state,
                     &mut self.mouse_reference_position,
+                    &mut self.enter_clicked,
                     &mut self.camera,
+                    &mut self.scene,
                 );
 
                 if let Err(err) = window.draw(&self.scene, &self.camera) {

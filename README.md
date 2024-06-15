@@ -12,7 +12,7 @@ Run the program by running the following command in the terminal (on Linux):
 cargo run
 ```
 
-You can move the camera using W/S/A/D/Q/E. You can rotate the camera by right clicking and dragging or using the Left/Right/Up/Down keys.
+You can move the camera using W/S/A/D/Q/E. You can rotate the camera by right clicking and dragging or using the Left/Right/Up/Down keys. Generate a new world by pressing enter.
 
 ## Explanation WFC
 Wave function collapsed works by first assigning each tile position every possible tile, each tile position has a so called wave function with multiple possible outputs. This is the start state for the algorithm. It then chooses a tile position to collapse, it is assigned one of its possible tiles. This then affects its neighbouring tiles so their wave function is updated. This process continues until the entire map has been filled, the max iteration count has been reached or the map has reached an impossible state where no more tile positions can be collapsed. It chooses the order of tile position collapse depending on the placement strategy used. Our project implements the following strategies:

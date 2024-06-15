@@ -23,6 +23,7 @@ pub enum Action {
     CameraRotateUp,
     CameraRotateDown,
     DragMouse,
+    Enter,
 
     //Window
     CloseWindow,
@@ -126,6 +127,11 @@ impl Default for Controls {
                 Named(NamedKey::ArrowDown),
                 ModifiersState::empty(),
                 Action::CameraRotateDown,
+            ),
+            Binding::new(
+                Named(NamedKey::Enter),
+                ModifiersState::empty(),
+                Action::Enter,
             ),
         ];
 
@@ -241,6 +247,7 @@ pub struct ControlState {
     pub camera_rotate_up: bool,
     pub camera_rotate_down: bool,
     pub drag_mouse: bool,
+    pub enter: bool,
     pub mouse_position: Vector2<f32>,
 }
 
@@ -279,6 +286,9 @@ impl ControlState {
             }
             Action::DragMouse => {
                 self.drag_mouse = active;
+            }
+            Action::Enter => {
+                self.enter = active;
             }
             _ => {}
         }
