@@ -6,6 +6,8 @@ This is a project that implements wave function collapse using Rust, WGPU and Wi
 
 [Video Demo Of Green City Example](https://github.com/lukasfri/kth-dd2323-project/assets/90641975/83765bfd-ed3b-41d2-9b19-03e747141630)
 
+[Video of interacting with the program](https://github.com/lukasfri/kth-dd2323-project/assets/25331056/918f3308-3460-47df-a43a-5387b5eefc6e)
+
 This project focuses on usability by letting the user easily change generation parameters by modifying config files. This also allows the user to easily upload their own tileset for use in the program. See [documentation](#documentation-configtxt).
 
 Run the program by running the following command in the terminal (on Linux):
